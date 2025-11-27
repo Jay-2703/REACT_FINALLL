@@ -20,76 +20,6 @@ const COLORS = {
   accent: '#bfa45b',
 };
 
-// Mock Lessons Data
-const MOCK_LESSONS_DATA = {
-  1: [
-    { id: 1, order: 1, title: 'Introduction to Piano', contentType: 'video', duration: 15, associatedQuiz: { type: 'standard', id: 1, title: 'Piano Basics Quiz' }, completionCount: 89, avgTimeSpent: 18 },
-    { id: 2, order: 2, title: 'Hand Positioning', contentType: 'text', duration: 10, associatedQuiz: null, completionCount: 76, avgTimeSpent: 12 },
-    { id: 3, order: 3, title: 'Basic Scales', contentType: 'interactive', duration: 20, associatedQuiz: { type: 'game', id: 2, title: 'Scale Master' }, completionCount: 65, avgTimeSpent: 25 },
-  ],
-  2: [
-    { id: 4, order: 1, title: 'Advanced Finger Techniques', contentType: 'video', duration: 25, associatedQuiz: { type: 'standard', id: 3, title: 'Technique Assessment' }, completionCount: 72, avgTimeSpent: 28 },
-    { id: 5, order: 2, title: 'Repertoire Analysis', contentType: 'text', duration: 15, associatedQuiz: null, completionCount: 58, avgTimeSpent: 20 },
-  ],
-};
-
-// Mock Quizzes Data
-const MOCK_QUIZZES_DATA = {
-  1: [
-    { id: 1, title: 'Piano Basics Quiz', type: 'standard', assignedLesson: 'Introduction to Piano', attempts: 234, avgScore: 78, status: 'active' },
-    { id: 2, title: 'Scale Master', type: 'game', assignedLesson: 'Basic Scales', attempts: 156, avgScore: 82, status: 'active' },
-    { id: 3, title: 'Music Theory Intro', type: 'standard', assignedLesson: null, attempts: 123, avgScore: 75, status: 'active' },
-  ],
-  2: [
-    { id: 4, title: 'Technique Assessment', type: 'standard', assignedLesson: 'Advanced Finger Techniques', attempts: 89, avgScore: 85, status: 'active' },
-    { id: 5, title: 'Sight Reading Challenge', type: 'game', assignedLesson: null, attempts: 67, avgScore: 79, status: 'draft' },
-  ],
-};
-
-// Mock Modules Data - Enhanced
-const MOCK_MODULES_DATA = [
-  { 
-    id: 1, name: 'Piano Basics', description: 'Learn the fundamentals of piano', instrument: 'piano', difficulty: 'beginner', 
-    lessons: 3, quizzes: 2, students: 124, status: 'published', updated: '2025-11-20', published: true, 
-    completionRate: 65, avgScore: 78, createdDate: '2025-09-01'
-  },
-  { 
-    id: 2, name: 'Advanced Piano Techniques', description: 'Master advanced piano skills', instrument: 'piano', difficulty: 'advanced', 
-    lessons: 2, quizzes: 2, students: 87, status: 'published', updated: '2025-11-18', published: true, 
-    completionRate: 72, avgScore: 85, createdDate: '2025-08-15'
-  },
-  { 
-    id: 3, name: 'Guitar Essentials', description: 'Guitar fundamentals for beginners', instrument: 'guitar', difficulty: 'beginner', 
-    lessons: 10, quizzes: 8, students: 156, status: 'published', updated: '2025-11-19', published: true, 
-    completionRate: 68, avgScore: 76, createdDate: '2025-07-20'
-  },
-  { 
-    id: 4, name: 'Jazz Improvisation', description: 'Improvisation techniques for jazz musicians', instrument: 'guitar', difficulty: 'advanced', 
-    lessons: 15, quizzes: 12, students: 45, status: 'published', updated: '2025-11-21', published: true, 
-    completionRate: 55, avgScore: 81, createdDate: '2025-06-10'
-  },
-  { 
-    id: 5, name: 'Music Theory 101', description: 'Complete music theory foundation', instrument: 'theory', difficulty: 'intermediate', 
-    lessons: 20, quizzes: 18, students: 203, status: 'published', updated: '2025-11-15', published: true, 
-    completionRate: 71, avgScore: 79, createdDate: '2025-05-01'
-  },
-  { 
-    id: 6, name: 'Chord Progressions', description: 'Understanding chord progressions', instrument: 'piano', difficulty: 'intermediate', 
-    lessons: 9, quizzes: 7, students: 98, status: 'draft', updated: '2025-11-22', published: false, 
-    completionRate: 0, avgScore: 0, createdDate: '2025-10-01'
-  },
-  { 
-    id: 7, name: 'Fingerpicking Techniques', description: 'Master fingerpicking on guitar', instrument: 'guitar', difficulty: 'intermediate', 
-    lessons: 11, quizzes: 9, students: 72, status: 'draft', updated: '2025-11-16', published: false, 
-    completionRate: 0, avgScore: 0, createdDate: '2025-09-15'
-  },
-  { 
-    id: 8, name: 'Ear Training Mastery', description: 'Develop perfect pitch and ear training', instrument: 'theory', difficulty: 'advanced', 
-    lessons: 18, quizzes: 15, students: 56, status: 'archived', updated: '2025-10-01', published: false, 
-    completionRate: 62, avgScore: 77, createdDate: '2025-04-01'
-  },
-];
-
 // --- Sidebar Navigation Component ---
 const Sidebar = ({ isCollapsed, isMobileOpen, closeSidebar, activePage = 'modules', navigate }) => {
   const navItems = [
@@ -1455,7 +1385,7 @@ const LessonManagementModal = ({ moduleId, isOpen, onClose, lessons, onAddLesson
         moduleId={moduleId}
         isOpen={quizModalOpen}
         onClose={() => setQuizModalOpen(false)}
-        quizzes={MOCK_QUIZZES_DATA[moduleId] || []}
+        quizzes={[]}
       />
     </>
   );
@@ -1761,14 +1691,12 @@ const AdminModules = () => {
             >
               <Menu size={24} />
             </button>
-            <h2 className="text-xl font-semibold text-white">Modules & Lessons</h2>
-          </div>
-          
-          {/* Header Middle - Timezone/Time */}
-          <div className="hidden md:flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock size={12} />
-              <span>{formatCurrentDateTime()}</span>
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-xl font-semibold text-white">Modules & Lessons</h2>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                <Clock size={12} />
+                <span>{formatCurrentDateTime()}</span>
+              </div>
             </div>
           </div>
           
@@ -2026,8 +1954,8 @@ const AdminModules = () => {
                         />
                       </td>
                     </tr>,
-                    expandedModuleId === module.id && MOCK_LESSONS_DATA[module.id] ? 
-                      MOCK_LESSONS_DATA[module.id].map(lesson => (
+                    expandedModuleId === module.id ? 
+                      [].map(lesson => (
                         <LessonRow
                           key={`lesson-${lesson.id}`}
                           lesson={lesson}
@@ -2087,7 +2015,7 @@ const AdminModules = () => {
         moduleId={lessonManagementModal.moduleId}
         isOpen={lessonManagementModal.isOpen}
         onClose={() => setLessonManagementModal({ isOpen: false, moduleId: null })}
-        lessons={lessonManagementModal.moduleId ? MOCK_LESSONS_DATA[lessonManagementModal.moduleId] || [] : []}
+        lessons={[]}
         onEditLessonContent={(lessonId, lessonTitle) => {
           setLessonContentEditor({ isOpen: true, lessonId, lessonTitle, content: '' });
         }}
@@ -2107,7 +2035,7 @@ const AdminModules = () => {
         moduleId={quizModal.moduleId}
         isOpen={quizModal.isOpen}
         onClose={() => setQuizModal({ isOpen: false, moduleId: null })}
-        quizzes={quizModal.moduleId ? MOCK_QUIZZES_DATA[quizModal.moduleId] || [] : []}
+        quizzes={[]}
         onAddQuiz={(quiz) => {
           console.log('New quiz added:', quiz);
         }}

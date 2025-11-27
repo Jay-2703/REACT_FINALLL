@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import api from '../lib/api'
 import { FaInstagram, FaFacebook, FaTiktok, FaBell } from "react-icons/fa";
+import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
 
 import {
   gallery1,
@@ -45,7 +46,7 @@ export default function Landing() {
   const [miniSlotsError, setMiniSlotsError] = useState(null)
   // Burger menu state
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  // State for booking success notification
+  // State for booking success modal
   const [bookingSuccess, setBookingSuccess] = useState(false)
   const [bookingDetails, setBookingDetails] = useState(null)
   const [showBookingModal, setShowBookingModal] = useState(false)
@@ -71,13 +72,16 @@ export default function Landing() {
         const oauthToken = qs.get('token')
         const oauthUser = qs.get('user')
         const oauthProvider = qs.get('oauth')
-        // Check if returning from successful booking
-        const bookingSuccess = qs.get('booking')
-        const bookingId = qs.get('id')
+        // Check if returning from payment (new flow)
+        const paymentStatus = qs.get('payment') // 'success' or 'failed'
+        const bookingId = qs.get('booking') || qs.get('id')
         
         if (oauthToken) {
-          // Store the token
+          // Store the token and auth provider (google/facebook)
           localStorage.setItem('token', oauthToken)
+          if (oauthProvider) {
+            localStorage.setItem('authProvider', oauthProvider)
+          }
           
           // Parse and store user data if provided
           let userData = null
@@ -114,43 +118,67 @@ export default function Landing() {
           }
         }
 
-        // Check if returning from successful booking
-        if (bookingSuccess === 'success' && bookingId) {
-          console.log('Booking successful:', bookingId)
-          setBookingSuccess(true)
-          setShowNotificationPanel(true)
-          
-          // Fetch booking details from backend
-          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-          try {
-            const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' }
-            });
-            
-            if (response.ok) {
-              const result = await response.json();
-              setBookingDetails(result.data);
-              
-              // Load QR code library if needed
-              if (!window.QRCode && result.data?.qr_code_data) {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
-                document.head.appendChild(script);
+        // Check if returning from payment
+        if (paymentStatus && bookingId) {
+          console.log('Payment return detected:', paymentStatus, bookingId)
+
+          if (paymentStatus === 'success') {
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+            const maxAttempts = 3;
+            const delayMs = 800;
+            let verifiedData = null;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                // First, ask backend to verify with Xendit and update payment_status if needed
+                const verifyResponse = await fetch(`${API_URL}/webhooks/xendit/verify/${bookingId}`);
+                if (verifyResponse.ok) {
+                  const verifyResult = await verifyResponse.json();
+                  const data = verifyResult.data;
+                  const isPaid = data?.payment_status && data.payment_status.toLowerCase() === 'paid';
+                  const hasQr = !!data?.qr_code_url;
+                  if (isPaid && hasQr) {
+                    verifiedData = data;
+                    break;
+                  }
+                }
+
+                // Fallback: fetch booking directly if verify endpoint didn't return paid yet
+                const response = await fetch(`${API_URL}/bookings/${bookingId}`);
+                if (response.ok) {
+                  const result = await response.json();
+                  const data = result.data;
+                  const isPaid = data?.payment_status && data.payment_status.toLowerCase() === 'paid';
+                  const hasQr = !!data?.qr_code_url;
+                  if (isPaid && hasQr) {
+                    verifiedData = data;
+                    break;
+                  }
+                }
+              } catch (err) {
+                console.error('Verification attempt failed:', err);
               }
-              
-              // Fetch updated notifications to show booking confirmation
-              const token = localStorage.getItem('token');
-              if (token) {
-                setTimeout(() => fetchNotifications(), 1000);
+
+              if (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
               }
             }
-          } catch (err) {
-            console.error('Error fetching booking details:', err);
+
+            if (verifiedData) {
+              setBookingDetails(verifiedData);
+            } else {
+              // Webhook or verification not finished yet; show minimal info and let email handle full confirmation
+              setBookingDetails({ booking_id: bookingId });
+            }
+            setShowBookingModal(true);
+            setBookingSuccess(true);
+          } else if (paymentStatus === 'failed') {
+            // TODO: implement dedicated failed payment modal per spec
           }
-          
+
           // Clean up URL parameters
           const url = new URL(window.location.href)
+          url.searchParams.delete('payment')
           url.searchParams.delete('booking')
           url.searchParams.delete('id')
           window.history.replaceState({}, document.title, url.pathname + url.search + url.hash)
@@ -184,13 +212,18 @@ export default function Landing() {
     }
   }, [user])
 
+  // Set up real-time notifications for logged-in user
+  useRealtimeNotifications(false, () => {
+    fetchNotifications();
+  });
+
   // Fetch notifications from backend
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       const response = await fetch(`${API_URL}/notifications`, {
         method: 'GET',
         headers: { 
@@ -201,8 +234,18 @@ export default function Landing() {
       
       if (response.ok) {
         const result = await response.json();
-        setNotifications(result.data.notifications || []);
-        setUnreadCount(result.data.unreadCount || 0);
+        const apiNotifications = result.data?.notifications || [];
+        // Map backend fields to the shape used by the original UI (type, read_status)
+        const mappedNotifications = apiNotifications.map((n) => ({
+          ...n,
+          type: n.notification_type || n.type,
+          read_status: typeof n.is_read !== 'undefined'
+            ? !!n.is_read
+            : !!n.read_status
+        }));
+
+        setNotifications(mappedNotifications);
+        setUnreadCount(result.data?.unreadCount || 0);
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
@@ -236,7 +279,7 @@ export default function Landing() {
     }
 
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       const response = await fetch(`${API_URL}/contact/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -358,10 +401,11 @@ export default function Landing() {
   // --- NEW HANDLERS FOR MINI-BOOKING FORM ---
   const SERVICE_CONFIG = {
     music_lesson: { label: 'Music Lessons', durationFixed: true },
-    recording: { label: 'Recording', durationFixed: false },
-    mixing: { label: 'Mixing', durationFixed: false },
-    band_rehearsal: { label: 'Band Rehearsal', durationFixed: false },
-    production: { label: 'Production', durationFixed: false }
+    recording: { label: 'Recording Studio', durationFixed: false },
+    rehearsal: { label: 'Rehearsal', durationFixed: false },
+    dance: { label: 'Dance Studio', durationFixed: false },
+    arrangement: { label: 'Music Arrangement', durationFixed: false },
+    voiceover: { label: 'Voiceover/Podcast', durationFixed: false },
   };
 
   const DURATION_OPTIONS = [
@@ -378,7 +422,7 @@ export default function Landing() {
     setMiniSlotsError(null);
     
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       const response = await fetch(
         `${API_URL}/bookings/available-slots-v2?service=${encodeURIComponent(service)}&duration=${duration}&date=${date}`
       );
@@ -741,10 +785,26 @@ export default function Landing() {
           {notifications.length > 0 && (
             <div className="bg-[#1b1b1b] px-4 py-2 border-t border-[#ffd700]/30">
               <button 
-                onClick={() => {
-                  // Mark all as read
-                  setNotifications(notifications.map(n => ({ ...n, read_status: true })));
-                  setUnreadCount(0);
+                onClick={async () => {
+                  const token = localStorage.getItem('token');
+                  if (!token) return;
+                  try {
+                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+                    const response = await fetch(`${API_URL}/notifications/read-all`, {
+                      method: 'PUT',
+                      headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                    if (response.ok) {
+                      // Update local state to match original design expectations
+                      setNotifications(notifications.map(n => ({ ...n, read_status: true, is_read: 1 })));
+                      setUnreadCount(0);
+                    }
+                  } catch (err) {
+                    console.error('Error marking all notifications as read:', err);
+                  }
                 }}
                 className="text-xs text-[#ffd700] hover:text-[#ffe44c] transition"
               >
@@ -1176,56 +1236,16 @@ export default function Landing() {
         </div>
       </footer>
 
-      {/* Booking Success Notification Card */}
-      {bookingSuccess && bookingDetails && (
-        <div className="fixed top-20 left-4 right-4 max-w-md mx-auto z-40 animate-slideDown">
-          <div 
-            className="bg-[#232323] rounded-lg p-6 border border-[#444] cursor-pointer hover:shadow-lg transition"
-            onClick={() => setShowBookingModal(true)}
-          >
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0">
-                <span className="text-3xl" style={{ color: '#ffd700' }}>✓</span>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-white mb-1">Booking Successful!</h3>
-                <p className="text-[#bbb] text-sm mb-3">Your booking has been confirmed.</p>
-                <button className="text-[#ffd700] font-semibold text-sm hover:text-[#ffe44c] transition">
-                  Click to view booking details →
-                </button>
-              </div>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setBookingSuccess(false)
-                }}
-                className="text-[#bbb] hover:text-white text-xl"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Booking Details Modal */}
       {showBookingModal && bookingDetails && (
         <>
           {/* Backdrop */}
           <div 
-            className="fixed inset-0 bg-black bg-opacity-60 z-40" 
-            onClick={() => setShowBookingModal(false)}
+            className="fixed inset-0 bg-black bg-opacity-75 z-40" 
           />
           {/* Modal */}
           <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#232323] rounded-2xl p-8 w-full max-w-2xl relative overflow-y-auto max-h-[90vh]" style={{ boxShadow: '0 0 30px rgba(255, 215, 0, 0.15)' }}>
-              {/* Close Button */}
-              <button
-                onClick={() => setShowBookingModal(false)}
-                className="absolute top-4 right-4 text-[#bbb] hover:text-[#ffd700] text-2xl transition"
-              >
-                ×
-              </button>
+            <div className="bg-[#232323] rounded-2xl p-8 w-full max-w-md relative overflow-y-auto max-h-[90vh]" style={{ boxShadow: '0 0 30px rgba(255, 215, 0, 0.15)' }}>
 
               {/* Header */}
               <div className="text-center mb-6 pb-6 border-b border-[#3d3d3d]">
@@ -1237,119 +1257,34 @@ export default function Landing() {
               </div>
 
               {/* Content Layout */}
-              <div className="flex flex-col lg:flex-row gap-6">
-                {/* Details Section */}
-                <div className="flex-1">
-                  {/* Booking ID */}
-                  <div className="text-[#ffd700] font-bold text-lg mb-4 pb-2 border-b border-dashed border-[#33332d]">
-                    Booking ID: {bookingDetails.booking_id}
-                  </div>
-                  
-                  {/* Booking Details */}
-                  <div className="space-y-0 mb-6">
-                    <DetailRow label="Name" value={bookingDetails.name || 'N/A'} />
-                    <DetailRow label="Email" value={bookingDetails.email || 'N/A'} />
-                    <DetailRow label="Contact" value={bookingDetails.contact || 'N/A'} />
-                    <DetailRow label="Service" value={formatServiceType(bookingDetails.service_type)} />
-                    <DetailRow label="Date & Time" value={`${bookingDetails.booking_date || 'N/A'} @ ${bookingDetails.booking_time || 'N/A'}`} />
-                    <DetailRow label="Duration" value={`${bookingDetails.hours || 1} hour(s)`} />
-                    {bookingDetails.members && <DetailRow label="Members" value={bookingDetails.members} />}
-                    <DetailRow label="Payment Method" value={formatPaymentMethod(bookingDetails.payment_method)} />
-                    <DetailRow 
-                      label="Payment Status" 
-                      value={
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          bookingDetails.payment_status === 'paid' 
-                            ? 'bg-green-900 text-green-200' 
-                            : bookingDetails.payment_status === 'pending'
-                            ? 'bg-yellow-900 text-yellow-200'
-                            : 'bg-red-900 text-red-200'
-                        }`}>
-                          {(bookingDetails.payment_status || 'PENDING').toUpperCase()}
-                        </span>
-                      } 
-                    />
-                    {bookingDetails.xendit_payment_id && (
-                      <DetailRow label="Payment Reference" value={bookingDetails.xendit_payment_id} />
-                    )}
-                  </div>
-                  
-                  {/* Total Amount */}
-                  <div className="bg-[#222114] border-2 border-[#ffd700] rounded-lg p-4 text-center mb-6">
-                    <div className="text-[#bbb] text-sm mb-1">Total Amount</div>
-                    <div className="text-[#ffd700] font-bold text-2xl">₱{bookingDetails.total_price || '0.00'}</div>
-                  </div>
-
-                  {/* Screenshot Message */}
-                  <div className="bg-[#1a1a0f] border-2 border-[#ffd700] rounded-lg p-4 mb-6 text-center">
-                    <div className="text-[#ffd700] font-semibold mb-2">📸 Important</div>
-                    <div className="text-white text-sm">Screenshot this page and the QR code below. You'll need them for check-in on your booking date.</div>
-                  </div>
+              <div className="space-y-4">
+                {/* Booking ID */}
+                <div className="text-[#ffd700] font-mono text-sm bg-[#1b1b1b] px-3 py-2 rounded-lg inline-block mx-auto">
+                  Booking ID: {bookingDetails.booking_id}
                 </div>
 
-                {/* QR Code Section */}
-                <div className="flex flex-col items-center justify-start lg:min-w-[200px]">
-                  {bookingDetails.qr_code_data ? (
-                    <>
-                      <div className="mb-4">
-                        <img 
-                          src={bookingDetails.qr_code_data} 
-                          alt="Booking QR Code"
-                          className="p-3 bg-white rounded-lg border-4 border-[#ffd700]"
-                          style={{ width: '180px', height: '180px' }}
-                        />
-                      </div>
-                      <div className="text-[#ffd700] font-semibold text-center text-sm">Scan to view booking</div>
-                      <div className="text-[#666] text-xs text-center mt-2">ID: {bookingDetails.booking_id}</div>
-                    </>
-                  ) : (
-                    <div className="text-center text-[#bbb] text-sm">
-                      <div className="text-[#666] mb-2">📱</div>
-                      <p>QR code will be generated shortly</p>
-                      <p className="text-xs text-[#555] mt-1">Refresh to update</p>
-                      <button 
-                        onClick={async () => {
-                          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-                          try {
-                            const response = await fetch(`${API_URL}/bookings/${bookingDetails.booking_id}`, {
-                              method: 'GET',
-                              headers: { 'Content-Type': 'application/json' }
-                            });
-                            if (response.ok) {
-                              const result = await response.json();
-                              setBookingDetails(result.data);
-                            }
-                          } catch (err) {
-                            console.error('Error refreshing booking:', err);
-                          }
-                        }}
-                        className="mt-3 px-3 py-1 bg-[#ffd700]/20 border border-[#ffd700] text-[#ffd700] text-xs rounded hover:bg-[#ffd700]/30 transition"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                  )}
-                </div>
+                {/* Optional email line */}
+                {bookingDetails.email && (
+                  <p className="text-xs text-[#aaa] text-center">
+                    A confirmation email has been sent to {bookingDetails.email}.
+                  </p>
+                )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-8">
-                <button
-                  onClick={() => {
-                    setShowBookingModal(false)
-                    setBookingSuccess(false)
-                  }}
-                  className="flex-1 bg-[#ffd700] text-black font-bold py-3 rounded-lg hover:bg-[#ffe44c] transition"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => window.location.href = '/Profile'}
-                  className="flex-1 bg-[#2a2a2a] text-[#ffd700] font-bold py-3 rounded-lg border border-[#ffd700] hover:bg-[#3d3d3d] transition"
-                >
-                  My Bookings
-                </button>
-              </div>
+              {/* Single Action Button */}
+              <button
+                onClick={() => {
+                  const id = bookingDetails.booking_id;
+                  if (id) {
+                    window.location.href = `/booking/${id}`;
+                  } else {
+                    window.location.href = '/';
+                  }
+                }}
+                className="mt-8 w-full bg-[#ffd700] hover:bg-[#ffe44c] text-black font-semibold py-3 rounded-lg transition text-lg"
+              >
+                View Booking Details
+              </button>
             </div>
           </div>
         </>

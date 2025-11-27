@@ -72,6 +72,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Cookie parser middleware (for JWT tokens in cookies)
 app.use(cookieParser());
 
+// Serve uploaded QR codes and other public files
+const uploadsDir = path.join(__dirname, '../uploads');
+app.use('/uploads', express.static(uploadsDir));
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);

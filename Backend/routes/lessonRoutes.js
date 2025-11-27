@@ -5,7 +5,8 @@ import {
   getModuleLessons,
   getLesson,
   completeLesson,
-  getUserProgress
+  getUserProgress,
+  getAllBadges
 } from '../controllers/lessonController.js';
 import { authenticateToken } from '../utils/jwt.js';
 
@@ -26,6 +27,9 @@ router.get('/modules/:instrument/:moduleId', getModuleLessons);
 
 // Get single lesson (public)
 router.get('/lesson/:lessonId', getLesson);
+
+// Get all badges (public)
+router.get('/badges', getAllBadges);
 
 // Mark lesson as complete (requires auth)
 router.post('/complete', authenticateToken, completeLesson);

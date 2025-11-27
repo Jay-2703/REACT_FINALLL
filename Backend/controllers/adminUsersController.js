@@ -154,10 +154,12 @@ export const getUsersList = async (req, res) => {
     }
 
     // Status filter
+    // Active: logged in within 30 days OR newly registered within 30 days with no last_login yet
+    // Inactive: everyone else
     if (status === 'active') {
-      whereConditions.push('last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+      whereConditions.push('((last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY)) OR (last_login IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)))');
     } else if (status === 'inactive') {
-      whereConditions.push('(last_login IS NULL OR last_login < DATE_SUB(NOW(), INTERVAL 30 DAY))');
+      whereConditions.push('NOT ((last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY)) OR (last_login IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)))');
     }
 
     const whereClause = whereConditions.join(' AND ');
@@ -178,7 +180,9 @@ export const getUsersList = async (req, res) => {
         email,
         role,
         CASE 
-          WHEN last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) THEN 'Active'
+          WHEN last_login >= DATE_SUB(NOW(), INTERVAL 30 DAY) 
+            OR (last_login IS NULL AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY))
+          THEN 'Active'
           ELSE 'Inactive'
         END as status,
         DATE_FORMAT(last_login, '%Y-%m-%d') as last_login,

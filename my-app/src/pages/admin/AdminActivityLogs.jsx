@@ -356,14 +356,12 @@ const AdminActivityLogs = () => {
               <Menu size={24} />
             </button>
 
-            <h2 className="text-xl font-semibold text-white">Activity Logs</h2>
-          </div>
-          
-          {/* Header Middle - Timezone/Time */}
-          <div className="hidden md:flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock size={12} />
-              <span>{formatCurrentDateTime()}</span>
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-xl font-semibold text-white">Activity Logs</h2>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                <Clock size={12} />
+                <span>{formatCurrentDateTime()}</span>
+              </div>
             </div>
           </div>
           

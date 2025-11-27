@@ -79,6 +79,79 @@ export const sendRegistrationOTP = async (req, res) => {
 };
 
 /**
+ * Change password for logged-in user
+ * POST /api/auth/change-password
+ * Protected - requires JWT token
+ */
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authenticated'
+      });
+    }
+
+    const { current_password, new_password } = req.body;
+
+    if (!current_password || !new_password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
+      });
+    }
+
+    if (new_password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters long'
+      });
+    }
+
+    const [user] = await query(
+      'SELECT id, hashed_password FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const isMatch = await comparePassword(current_password, user.hashed_password);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    const newHashedPassword = await hashPassword(new_password);
+
+    await query(
+      'UPDATE users SET hashed_password = ? WHERE id = ?',
+      [newHashedPassword, userId]
+    );
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error. Please try again later.'
+    });
+  }
+};
+
+/**
  * Verify registration OTP and create user account
  * POST /api/auth/verify-registration-otp
  */

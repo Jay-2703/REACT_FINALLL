@@ -28,18 +28,6 @@ const COLORS = {
   borderColor: '#444',
 };
 
-// Mock Payments Data
-const MOCK_PAYMENTS_DATA = [
-  { id: 1, payment_id: 'PAY-001', booking_id: 'BK-501', client_name: 'John Smith', service_type: 'Lesson', amount: 75, base_amount: 75, add_ons: 0, payment_method: 'Credit Card', status: 'Success', transaction_date: '2025-11-23', invoice_number: 'INV-2025-0001', gateway_response: '000' },
-  { id: 2, payment_id: 'PAY-002', booking_id: 'BK-502', client_name: 'Sarah Johnson', service_type: 'Recording', amount: 250, base_amount: 200, add_ons: 50, payment_method: 'E-wallet', status: 'Success', transaction_date: '2025-11-23', invoice_number: 'INV-2025-0002', gateway_response: '000' },
-  { id: 3, payment_id: 'PAY-003', booking_id: 'BK-503', client_name: 'Mike Chen', service_type: 'Mixing', amount: 150, base_amount: 120, add_ons: 30, payment_method: 'Debit Card', status: 'Pending', transaction_date: '2025-11-22', invoice_number: 'INV-2025-0003', gateway_response: '001' },
-  { id: 4, payment_id: 'PAY-004', booking_id: 'BK-504', client_name: 'Emma Davis', service_type: 'Lesson', amount: 75, base_amount: 75, add_ons: 0, payment_method: 'Credit Card', status: 'Failed', transaction_date: '2025-11-22', invoice_number: 'INV-2025-0004', gateway_response: '100' },
-  { id: 5, payment_id: 'PAY-005', booking_id: 'BK-505', client_name: 'James Wilson', service_type: 'Production', amount: 500, base_amount: 400, add_ons: 100, payment_method: 'Bank Transfer', status: 'Success', transaction_date: '2025-11-21', invoice_number: 'INV-2025-0005', gateway_response: '000' },
-  { id: 6, payment_id: 'PAY-006', booking_id: 'BK-506', client_name: 'Lisa Anderson', service_type: 'Band Rehearsal', amount: 120, base_amount: 100, add_ons: 20, payment_method: 'E-wallet', status: 'Refunded', transaction_date: '2025-11-20', invoice_number: 'INV-2025-0006', gateway_response: '000' },
-  { id: 7, payment_id: 'PAY-007', booking_id: 'BK-507', client_name: 'Robert Taylor', service_type: 'Lesson', amount: 75, base_amount: 75, add_ons: 0, payment_method: 'Credit Card', status: 'Success', transaction_date: '2025-11-20', invoice_number: 'INV-2025-0007', gateway_response: '000' },
-  { id: 8, payment_id: 'PAY-008', booking_id: 'BK-508', client_name: 'Patricia Moore', service_type: 'Recording', amount: 300, base_amount: 250, add_ons: 50, payment_method: 'E-wallet', status: 'Pending', transaction_date: '2025-11-19', invoice_number: 'INV-2025-0008', gateway_response: '001' },
-];
-
 // --- Sidebar Navigation Component ---
 const Sidebar = ({ isCollapsed, isMobileOpen, closeSidebar, activePage = 'payments', navigate }) => {
   const navItems = [
@@ -418,14 +406,12 @@ const AdminPayments = () => {
               <Menu size={24} />
             </button>
 
-            <h2 className="text-xl font-semibold text-white">Payments & Billing</h2>
-          </div>
-          
-          {/* Header Middle - Timezone/Time */}
-          <div className="hidden md:flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock size={12} />
-              <span>{formatCurrentDateTime()}</span>
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-xl font-semibold text-white">Payments & Billing</h2>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                <Clock size={12} />
+                <span>{formatCurrentDateTime()}</span>
+              </div>
             </div>
           </div>
           

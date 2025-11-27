@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, BookOpen, FileText, Settings, LogOut,
@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { formatCurrentDateTime } from '../../utils/timeUtils';
 import NotificationDropdown from '../../components/NotificationDropdown';
+
+// API Base URL Configuration
+const API_BASE_URL = 'http://localhost:5000/api';
 
 // --- Tailwind Configuration (Arbitrary Values based on your CSS variables) ---
 const COLORS = {
@@ -373,7 +376,10 @@ const AdminReports = () => {
 
   const handleRefresh = () => {
     setLastUpdated(new Date());
-    console.log('Dashboard refreshed');
+    console.log('📊 Refreshing reports...');
+    fetchBookingReport();
+    fetchTransactionReport();
+    fetchEngagementReport();
   };
 
   const handleDatePreset = (preset) => {
@@ -386,12 +392,17 @@ const AdminReports = () => {
   };
 
   // Fetch Booking Report
-  const fetchBookingReport = async () => {
+  const fetchBookingReport = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
-      if (!token) return;
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('❌ No token found');
+        setLoading(false);
+        return;
+      }
 
-      const response = await fetch('http://localhost:5000/api/admin/reports/bookings', {
+      const response = await fetch(`${API_BASE_URL}/admin/reports/bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -401,22 +412,28 @@ const AdminReports = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
-          setBookingReport(data.data.slice(0, 5));
-          console.log('✅ Booking report loaded');
+          setBookingReport(data.data.slice(0, 10));
+          console.log('✅ Booking report loaded:', data.data.length, 'bookings');
         }
+      } else {
+        console.error('❌ Failed to fetch booking report:', response.status);
+        setBookingReport([]);
       }
     } catch (error) {
       console.error('Error fetching booking report:', error);
+      setBookingReport([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
   // Fetch Transaction Report
-  const fetchTransactionReport = async () => {
+  const fetchTransactionReport = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+      const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5000/api/admin/reports/transactions', {
+      const response = await fetch(`${API_BASE_URL}/admin/reports/transactions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -426,22 +443,26 @@ const AdminReports = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
-          setTransactionReport(data.data.slice(0, 3));
-          console.log('✅ Transaction report loaded');
+          setTransactionReport(data.data.slice(0, 10));
+          console.log('✅ Transaction report loaded:', data.data.length, 'transactions');
         }
+      } else {
+        console.error('❌ Failed to fetch transaction report:', response.status);
+        setTransactionReport([]);
       }
     } catch (error) {
       console.error('Error fetching transaction report:', error);
+      setTransactionReport([]);
     }
-  };
+  }, []);
 
   // Fetch Engagement Report
-  const fetchEngagementReport = async () => {
+  const fetchEngagementReport = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+      const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5000/api/admin/reports/lessons', {
+      const response = await fetch(`${API_BASE_URL}/admin/reports/lessons`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -451,14 +472,18 @@ const AdminReports = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data) {
-          setEngagementReport(data.data.slice(0, 4));
-          console.log('✅ Engagement report loaded');
+          setEngagementReport(data.data.slice(0, 10));
+          console.log('✅ Engagement report loaded:', data.data.length, 'lessons');
         }
+      } else {
+        console.error('❌ Failed to fetch engagement report:', response.status);
+        setEngagementReport([]);
       }
     } catch (error) {
       console.error('Error fetching engagement report:', error);
+      setEngagementReport([]);
     }
-  };
+  }, []);
 
   // Calculate metrics from report data
   const calculateMetrics = (bookings, transactions, engagement) => {
@@ -547,7 +572,7 @@ const AdminReports = () => {
     fetchBookingReport();
     fetchTransactionReport();
     fetchEngagementReport();
-  }, []);
+  }, [fetchBookingReport, fetchTransactionReport, fetchEngagementReport]);
   
   // Calculate metrics when reports are loaded
   useEffect(() => {

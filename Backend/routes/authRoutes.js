@@ -25,7 +25,8 @@ import {
   resendPasswordResetOTP,
   logout,
   getProfile,
-  updateProfile
+  updateProfile,
+  changePassword
 } from '../controllers/authController.js';
 import { googleAuth, googleCallback, facebookAuth, facebookCallback } from '../controllers/oauthController.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -113,6 +114,13 @@ router.post(
   validateResetPassword,
   handleValidationErrors,
   resetPassword
+);
+
+// Change password for logged-in user
+router.post(
+  '/change-password',
+  requireAuth,
+  changePassword
 );
 
 // Resend password reset OTP

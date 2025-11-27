@@ -5,10 +5,12 @@ const API_BASE_URL = 'http://localhost:5000/api';
 /**
  * Hook to fetch and manage notifications from backend
  * @param {boolean} isAdmin - Whether to fetch admin notifications or personal notifications
- * @param {number} refreshInterval - Interval in milliseconds to refresh notifications (default: 30000ms = 30 seconds)
+ * @param {number} refreshInterval - Interval in milliseconds to refresh notifications (default: 10000ms = 10 seconds for admin, 30 seconds for users)
  * @returns {object} - { notifications, unreadCount, isLoading, error, markAsRead, markAllAsRead, refreshNotifications }
  */
-export const useNotifications = (isAdmin = false, refreshInterval = 30000) => {
+export const useNotifications = (isAdmin = false, refreshInterval = null) => {
+  // Use faster polling for admin notifications, slower for user notifications
+  const interval = refreshInterval !== null ? refreshInterval : (isAdmin ? 10000 : 30000);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,11 +61,11 @@ export const useNotifications = (isAdmin = false, refreshInterval = 30000) => {
   useEffect(() => {
     refreshNotifications();
     
-    if (refreshInterval > 0) {
-      const interval = setInterval(refreshNotifications, refreshInterval);
-      return () => clearInterval(interval);
+    if (interval > 0) {
+      const pollInterval = setInterval(refreshNotifications, interval);
+      return () => clearInterval(pollInterval);
     }
-  }, [refreshNotifications, refreshInterval]);
+  }, [refreshNotifications, interval]);
 
   // Mark single notification as read
   const markAsRead = useCallback(async (notificationId) => {
@@ -82,7 +84,7 @@ export const useNotifications = (isAdmin = false, refreshInterval = 30000) => {
       if (response.ok) {
         // Update local state
         setNotifications(notifications.map(notif =>
-          notif.id === notificationId ? { ...notif, is_read: true } : notif
+          notif.notification_id === notificationId ? { ...notif, is_read: true } : notif
         ));
         setUnreadCount(Math.max(0, unreadCount - 1));
       }

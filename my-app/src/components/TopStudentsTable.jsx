@@ -9,22 +9,8 @@ const TopStudentsTable = ({ students = [], onViewProfile }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Fallback mock data used when no real data is provided
-  const defaultData = [
-    { rank: 1, name: 'Emma Wilson', level: 8, xp: 5200, modules: 7, badges: 12, lastActive: '30 min ago' },
-    { rank: 2, name: 'Lucas Chen', level: 7, xp: 4850, modules: 6, badges: 10, lastActive: '2 hours ago' },
-    { rank: 3, name: 'Sophia Lopez', level: 7, xp: 4620, modules: 6, badges: 9, lastActive: 'Today' },
-    { rank: 4, name: 'Noah Williams', level: 6, xp: 4280, modules: 5, badges: 8, lastActive: 'Yesterday' },
-    { rank: 5, name: 'Isabella Martinez', level: 6, xp: 4150, modules: 5, badges: 7, lastActive: '2 days ago' },
-    { rank: 6, name: 'Ethan Brown', level: 6, xp: 3980, modules: 5, badges: 7, lastActive: '3 days ago' },
-    { rank: 7, name: 'Olivia Taylor', level: 5, xp: 3750, modules: 4, badges: 6, lastActive: '4 days ago' },
-    { rank: 8, name: 'Mason Anderson', level: 5, xp: 3620, modules: 4, badges: 6, lastActive: '5 days ago' },
-    { rank: 9, name: 'Ava Johnson', level: 5, xp: 3490, modules: 4, badges: 5, lastActive: 'Last week' },
-    { rank: 10, name: 'Logan White', level: 4, xp: 3250, modules: 3, badges: 5, lastActive: 'Last week' },
-  ];
-
-  // Decide which dataset to display
-  const data = students.length ? students : defaultData;
+  // Use only real data from students prop
+  const data = students;
   const totalStudents = data.length;
 
   const handlePrevious = () => {

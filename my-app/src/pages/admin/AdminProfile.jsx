@@ -3,9 +3,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Calendar, BookOpen, FileText, Settings, LogOut,
-  Menu, CreditCard, Bell, Activity, UserCheck
+  Menu, CreditCard, Bell, Activity, UserCheck, Edit3
 } from 'lucide-react';
 import NotificationDropdown from '../../components/NotificationDropdown';
+
+const API_BASE_URL = 'http://localhost:5000/api';
 
 const AdminProfile = () => {
   const navigate = useNavigate();
@@ -13,6 +15,12 @@ const AdminProfile = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [authProvider, setAuthProvider] = useState(() => localStorage.getItem('authProvider') || 'password');
   
   // Determine active nav based on current route
   const getActiveNav = () => {
@@ -32,53 +40,230 @@ const AdminProfile = () => {
   
   const activeNav = getActiveNav();
   const [userData, setUserData] = useState({
-    fullName: 'John Doe',
-    username: 'mixmaster_john',
-    email: 'john.doe@example.com',
-    contact: '+1 (555) 123-4567',
-    level: 'Level 5 - Rising Producer',
-    totalPoints: 2450,
-    badges: '8/15',
-    xpToNext: 1550,
-    levelProgress: 60
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    username: ''
   });
 
-  const [notifications, setNotifications] = useState([
-    { id: 1, label: 'Email Notifications', enabled: true },
-    { id: 2, label: 'SMS Notifications', enabled: false },
-    { id: 3, label: 'Booking Reminders', enabled: true },
-    { id: 4, label: 'Promotional Offers', enabled: false }
-  ]);
+  const [activityData, setActivityData] = useState({
+    last_login: 'N/A',
+    total_logins: 0,
+    actions_this_month: 0
+  });
 
-  const badges = [
-    { id: 1, name: 'First Booking', icon: '🎵', earned: true },
-    { id: 2, name: 'Regular User', icon: '⭐', earned: true },
-    { id: 3, name: 'Night Owl', icon: '🦉', earned: true },
-    { id: 4, name: 'Weekend Warrior', icon: '🎸', earned: true },
-    { id: 5, name: 'Early Bird', icon: '🌅', earned: true },
-    { id: 6, name: 'Loyal Member', icon: '💎', earned: true },
-    { id: 7, name: 'Social Mixer', icon: '👥', earned: true },
-    { id: 8, name: 'Tech Expert', icon: '🎛️', earned: true },
-    { id: 9, name: 'VIP Member', icon: '👑', earned: false },
-    { id: 10, name: 'Master Producer', icon: '🏆', earned: false }
-  ];
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  });
 
-  const achievements = [
-    { id: 1, title: 'Completed 10th Booking', date: '2024-03-15', points: 100 },
-    { id: 2, title: 'Booked Prime Time Slot', date: '2024-03-10', points: 50 },
-    { id: 3, title: 'Perfect Attendance Month', date: '2024-03-01', points: 200 }
-  ];
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    new_registrations: true,
+    new_bookings: true,
+    payment_alerts: true,
+    system_alerts: true,
+    low_booking_notifications: false
+  });
 
-  const bookingHistory = [
-    { id: 1, date: '2024-03-18', time: '2:00 PM - 5:00 PM', studio: 'Studio A', status: 'Completed' },
-    { id: 2, date: '2024-03-15', time: '6:00 PM - 9:00 PM', studio: 'Studio B', status: 'Completed' },
-    { id: 3, date: '2024-03-22', time: '10:00 AM - 1:00 PM', studio: 'Studio A', status: 'Upcoming' }
-  ];
+  // Fetch admin profile data on mount
+  useEffect(() => {
+    // Sync auth provider from localStorage in case it changed
+    const storedProvider = localStorage.getItem('authProvider');
+    if (storedProvider) {
+      setAuthProvider(storedProvider);
+    }
 
-  const toggleNotification = (id) => {
-    setNotifications(notifications.map(notif => 
-      notif.id === id ? { ...notif, enabled: !notif.enabled } : notif
-    ));
+    fetchAdminProfile();
+  }, []);
+
+  const fetchAdminProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/auth/login');
+        return;
+      }
+
+      const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+
+      const result = await res.json();
+      const user = result.user;
+      
+      setUserData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        username: user.username || ''
+      });
+
+      // Fetch activity data
+      await fetchActivityData();
+    } catch (err) {
+      console.error('Error fetching admin profile:', err);
+      setMessage({ type: 'error', text: 'Failed to load profile' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchActivityData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/admin/activity-summary`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setActivityData(result.data || activityData);
+      }
+    } catch (err) {
+      console.error('Error fetching activity data:', err);
+    }
+  };
+
+  const handleProfileUpdate = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          email: userData.email,
+          phone: userData.phone
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update profile');
+      }
+
+      setMessage({ type: 'success', text: 'Profile updated successfully!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setMessage({ type: 'error', text: err.message || 'Failed to update profile' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setSavingPassword(true);
+    setMessage({ type: '', text: '' });
+
+    // If user logged in via OAuth and has not explicitly set a password,
+    // guide them to use the Forgot Password flow instead of this form.
+    if (authProvider && authProvider !== 'password') {
+      setMessage({
+        type: 'error',
+        text: 'You signed in using a social account. Please use the "Forgot password" option on the login page to create a password first.'
+      });
+      setSavingPassword(false);
+      return;
+    }
+
+    // Basic client-side validations before hitting the API
+    if (!passwordData.current_password || !passwordData.new_password || !passwordData.confirm_password) {
+      setMessage({ type: 'error', text: 'Please fill in all password fields' });
+      setSavingPassword(false);
+      return;
+    }
+
+    if (passwordData.new_password !== passwordData.confirm_password) {
+      setMessage({ type: 'error', text: 'New password and confirmation do not match' });
+      setSavingPassword(false);
+      return;
+    }
+
+    if (passwordData.new_password.length < 8) {
+      setMessage({ type: 'error', text: 'New password must be at least 8 characters long' });
+      setSavingPassword(false);
+      return;
+    }
+
+    if (passwordData.current_password === passwordData.new_password) {
+      setMessage({ type: 'error', text: 'New password must be different from current password' });
+      setSavingPassword(false);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          current_password: passwordData.current_password,
+          new_password: passwordData.new_password
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        throw new Error(errorData?.message || 'Failed to change password');
+      }
+
+      setMessage({ type: 'success', text: 'Password changed successfully!' });
+      setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setMessage({ type: 'error', text: err.message || 'Failed to change password' });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleNotificationPreferencesChange = async () => {
+    setSaving(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/admin/notification-preferences`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(notificationPreferences)
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update preferences');
+      }
+
+      setMessage({ type: 'success', text: 'Notification preferences saved!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (err) {
+      console.error('Error updating preferences:', err);
+      setMessage({ type: 'error', text: err.message || 'Failed to update preferences' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -103,6 +288,14 @@ const AdminProfile = () => {
     { icon: FileText, label: 'Reports', nav: 'reports', path: '/admin/reports' },
     { icon: Settings, label: 'Settings', nav: 'settings', path: '/admin/profile' },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#1b1b1b] flex items-center justify-center">
+        <div className="text-white text-xl">Loading profile...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#1b1b1b] flex">
@@ -207,14 +400,21 @@ const AdminProfile = () => {
             <div className="bg-[#2a2a2a] border border-[#444] rounded-xl p-8 text-center text-white shadow-xl hover:border-[#bfa45b] hover:shadow-lg hover:shadow-[#bfa45b]/20 transition-all duration-200 hover:-translate-y-1">
               <h1 className="text-3xl font-bold text-[#bfa45b] mb-6">Admin Profile</h1>
               <div className="w-24 h-24 bg-[#bfa45b]/20 rounded-full mx-auto flex items-center justify-center text-4xl font-bold mb-4 border-2 border-[#bfa45b]">
-                {userData.fullName.split(' ').map(n => n.charAt(0)).join('')}
+                {userData.first_name.charAt(0)}{userData.last_name.charAt(0)}
               </div>
-              <h2 className="text-2xl font-bold mb-2 text-white">{userData.fullName}</h2>
+              <h2 className="text-2xl font-bold mb-2 text-white">{userData.first_name} {userData.last_name}</h2>
               <p className="text-[#bbb]">{userData.email}</p>
               <p className="text-sm text-[#bfa45b] font-semibold mt-2">Admin</p>
-              <p className="text-xs text-[#bbb] mt-3">Admin/User ID: ADM-001</p>
+              <p className="text-xs text-[#bbb] mt-3">Role: Administrator</p>
               
             </div>
+
+            {/* Message Alert */}
+            {message.text && (
+              <div className={`p-4 rounded-lg border ${message.type === 'success' ? 'bg-green-900/20 border-green-600 text-green-300' : 'bg-red-900/20 border-red-600 text-red-300'}`}>
+                {message.text}
+              </div>
+            )}
 
             {/* Two Column Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -224,13 +424,35 @@ const AdminProfile = () => {
                 
                 {/* 2. Personal Information Section */}
                 <div className="bg-[#2a2a2a] border border-[#444] rounded-xl p-6 hover:border-[#bfa45b]/50 transition-all">
-                  <h3 className="text-lg font-bold text-[#bfa45b] mb-6">Personal Information</h3>
-                  <div className="space-y-4">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-bold text-[#bfa45b]">Personal Information</h3>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProfile(!isEditingProfile)}
+                      className="text-[#bfa45b] hover:text-[#cfb86b] p-1 rounded-md hover:bg-[#1b1b1b] transition-colors"
+                      aria-label={isEditingProfile ? 'Disable editing' : 'Enable editing'}
+                    >
+                      <Edit3 size={18} />
+                    </button>
+                  </div>
+                  <form onSubmit={handleProfileUpdate} className="space-y-4">
                     <div>
-                      <label className="text-xs text-[#bbb] block mb-2">Full Name</label>
+                      <label className="text-xs text-[#bbb] block mb-2">First Name</label>
                       <input 
                         type="text" 
-                        defaultValue={userData.fullName}
+                        value={userData.first_name}
+                        onChange={(e) => setUserData({ ...userData, first_name: e.target.value })}
+                        readOnly={!isEditingProfile}
+                        className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white focus:outline-none focus:border-[#bfa45b] transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[#bbb] block mb-2">Last Name</label>
+                      <input 
+                        type="text" 
+                        value={userData.last_name}
+                        onChange={(e) => setUserData({ ...userData, last_name: e.target.value })}
+                        readOnly={!isEditingProfile}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
@@ -238,7 +460,9 @@ const AdminProfile = () => {
                       <label className="text-xs text-[#bbb] block mb-2">Email Address</label>
                       <input 
                         type="email" 
-                        defaultValue={userData.email}
+                        value={userData.email}
+                        onChange={(e) => setUserData({ ...userData, email: e.target.value })}
+                        readOnly={!isEditingProfile}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
@@ -246,25 +470,33 @@ const AdminProfile = () => {
                       <label className="text-xs text-[#bbb] block mb-2">Phone Number</label>
                       <input 
                         type="tel" 
-                        defaultValue={userData.contact}
+                        value={userData.phone}
+                        onChange={(e) => setUserData({ ...userData, phone: e.target.value })}
+                        readOnly={!isEditingProfile}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
-                  </div>
-                  <button className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors">
-                    Save Changes
-                  </button>
+                    <button 
+                      type="submit"
+                      disabled={saving || !isEditingProfile}
+                      className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors disabled:opacity-50"
+                    >
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </form>
                 </div>
 
                 {/* 3. Account Security Section */}
                 <div className="bg-[#2a2a2a] border border-[#444] rounded-xl p-6 hover:border-[#bfa45b]/50 transition-all">
                   <h3 className="text-lg font-bold text-[#bfa45b] mb-6">Account Security</h3>
-                  <div className="space-y-4">
+                  <form onSubmit={handlePasswordChange} className="space-y-4">
                     <div>
                       <label className="text-xs text-[#bbb] block mb-2">Current Password</label>
                       <input 
                         type="password" 
                         placeholder="Enter current password"
+                        value={passwordData.current_password}
+                        onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
@@ -273,6 +505,8 @@ const AdminProfile = () => {
                       <input 
                         type="password" 
                         placeholder="Enter new password"
+                        value={passwordData.new_password}
+                        onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
@@ -281,13 +515,19 @@ const AdminProfile = () => {
                       <input 
                         type="password" 
                         placeholder="Confirm new password"
+                        value={passwordData.confirm_password}
+                        onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
                         className="w-full px-4 py-2 bg-[#1b1b1b] border border-[#444] rounded-lg text-white placeholder-[#666] focus:outline-none focus:border-[#bfa45b] transition-colors"
                       />
                     </div>
-                  </div>
-                  <button className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors">
-                    Update Password
-                  </button>
+                    <button 
+                      type="submit"
+                      disabled={savingPassword}
+                      className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors disabled:opacity-50"
+                    >
+                      {savingPassword ? 'Updating...' : 'Update Password'}
+                    </button>
+                  </form>
                 </div>
               </div>
 
@@ -300,15 +540,15 @@ const AdminProfile = () => {
                   <div className="space-y-5">
                     <div className="pb-4 border-b border-[#444]">
                       <p className="text-xs text-[#bbb] mb-2">Last Login</p>
-                      <p className="text-sm font-semibold text-white">Nov 23, 2025 at 10:30 AM</p>
+                      <p className="text-sm font-semibold text-white">{activityData.last_login}</p>
                     </div>
                     <div className="pb-4 border-b border-[#444]">
                       <p className="text-xs text-[#bbb] mb-2">Total Logins</p>
-                      <p className="text-sm font-semibold text-white">156 times</p>
+                      <p className="text-sm font-semibold text-white">{activityData.total_logins} times</p>
                     </div>
                     <div className="pb-4">
                       <p className="text-xs text-[#bbb] mb-2">Actions This Month</p>
-                      <p className="text-sm font-semibold text-white">45 actions</p>
+                      <p className="text-sm font-semibold text-white">{activityData.actions_this_month} actions</p>
                     </div>
                   </div>
                   <button className="w-full mt-6 text-sm text-[#bfa45b] border border-[#bfa45b] rounded-lg py-2 hover:bg-[#bfa45b]/10 transition-colors font-semibold">
@@ -321,23 +561,35 @@ const AdminProfile = () => {
                   <h3 className="text-lg font-bold text-[#bfa45b] mb-6">Notification Preferences</h3>
                   <div className="space-y-4">
                     {[
-                      { label: 'New user registrations', value: true },
-                      { label: 'New bookings', value: true },
-                      { label: 'Payment alerts', value: true },
-                      { label: 'System alerts', value: true },
-                      { label: 'Low booking notifications', value: false }
-                    ].map((notif, idx) => (
-                      <div key={idx} className="flex items-center justify-between">
+                      { key: 'new_registrations', label: 'New user registrations' },
+                      { key: 'new_bookings', label: 'New bookings' },
+                      { key: 'payment_alerts', label: 'Payment alerts' },
+                      { key: 'system_alerts', label: 'System alerts' },
+                      { key: 'low_booking_notifications', label: 'Low booking notifications' }
+                    ].map((notif) => (
+                      <div key={notif.key} className="flex items-center justify-between">
                         <span className="text-sm text-white">{notif.label}</span>
                         <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" className="sr-only peer" defaultChecked={notif.value} />
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer" 
+                            checked={notificationPreferences[notif.key]}
+                            onChange={(e) => setNotificationPreferences({
+                              ...notificationPreferences,
+                              [notif.key]: e.target.checked
+                            })}
+                          />
                           <div className="w-11 h-6 bg-[#444] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#bfa45b] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#bfa45b]"></div>
                         </label>
                       </div>
                     ))}
                   </div>
-                  <button className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors">
-                    Save Preferences
+                  <button 
+                    onClick={handleNotificationPreferencesChange}
+                    disabled={saving}
+                    className="w-full mt-6 px-4 py-2 bg-[#bfa45b] text-[#1b1b1b] rounded-lg font-semibold hover:bg-[#cfb86b] transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Preferences'}
                   </button>
                 </div>
               </div>

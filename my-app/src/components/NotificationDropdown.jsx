@@ -1,13 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, X, CheckCircle, AlertCircle, Info, Clock } from 'lucide-react';
 import useNotifications from '../hooks/useNotifications';
+import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
 
 const NotificationDropdown = ({ isAdmin = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   
   // Use the notification hook
-  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead } = useNotifications(isAdmin);
+  const { notifications, unreadCount, isLoading, markAsRead, markAllAsRead, refreshNotifications } = useNotifications(isAdmin);
+  
+  const handleRealtimeNotification = useCallback(() => {
+    // Refresh notifications immediately when real-time notification arrives
+    refreshNotifications();
+  }, [refreshNotifications]);
+
+  // Set up real-time notifications
+  useRealtimeNotifications(isAdmin, handleRealtimeNotification);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -60,12 +69,14 @@ const NotificationDropdown = ({ isAdmin = false }) => {
       {/* Notification Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2a] border border-[#444] hover:border-[#bfa45b] text-[#bfa45b] hover:bg-[#bfa45b]/10 transition duration-200 relative group"
+        className={`flex items-center justify-center w-10 h-10 rounded-lg bg-[#2a2a2a] border border-[#444] hover:border-[#bfa45b] text-[#bfa45b] hover:bg-[#bfa45b]/10 transition duration-200 relative group ${
+          unreadCount > 0 ? 'animate-pulse' : ''
+        }`}
         title="Notifications"
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+          <span className="absolute top-1 right-1 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center animate-bounce">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -106,11 +117,11 @@ const NotificationDropdown = ({ isAdmin = false }) => {
               <div className="divide-y divide-[#444]">
                 {notifications.map((notif) => (
                   <div
-                    key={notif.id}
+                    key={notif.notification_id}
                     className={`p-3 hover:bg-[#1b1b1b] transition duration-150 cursor-pointer ${
                       !notif.is_read ? 'bg-[#1b1b1b]/50' : ''
                     }`}
-                    onClick={() => !notif.is_read && markAsRead(notif.id)}
+                    onClick={() => !notif.is_read && markAsRead(notif.notification_id)}
                   >
                     <div className="flex gap-3">
                       <div className="flex-shrink-0 mt-1">

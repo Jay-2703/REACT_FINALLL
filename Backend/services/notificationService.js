@@ -133,6 +133,7 @@ export async function notifyAdmins(type, message, link = null) {
   return await createNotification({
     user_id: null, // null = broadcast to all admins
     type,
+    title: message.substring(0, 50), // Use first 50 chars as title
     message,
     link
   });

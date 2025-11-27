@@ -2,6 +2,7 @@ import { query, getConnection } from '../config/db.js';
 import { verifyWebhookToken, getInvoiceStatus } from '../utils/xendit.js';
 import qrService from '../services/qrService.js';
 import bookingEmailService from '../services/bookingEmailService.js';
+import { notifyUser, notifyAdmins } from '../services/notificationService.js';
 
 /**
  * Xendit Webhook Controller
@@ -158,6 +159,26 @@ async function handlePaymentSuccess(event) {
     }
 
     console.log(`✅ Payment successful for booking ${externalId}`);
+
+    // Create notifications after successful payment
+    try {
+      // Notify user (if linked to a user account)
+      if (booking.user_id) {
+        const userMessage = `Payment received for your ${booking.service_type || 'studio'} booking on ${booking.booking_date}`;
+        await notifyUser(
+          booking.user_id,
+          'payment_received',
+          userMessage,
+          `/booking/${booking.booking_id}`
+        );
+      }
+
+      // Notify admins about the successful online payment
+      const adminMessage = `Online payment received for booking #${externalId} (${booking.service_type || 'studio'} on ${booking.booking_date}).`;
+      await notifyAdmins('payment_received', adminMessage, `/admin/bookings?id=${externalId}`);
+    } catch (notifError) {
+      console.warn('Warning: Failed to send payment notifications:', notifError.message);
+    }
   } catch (error) {
     await connection.rollback();
     console.error('Error handling payment success:', error);

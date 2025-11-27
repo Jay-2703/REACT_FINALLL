@@ -27,18 +27,6 @@ const COLORS = {
   borderColor: '#444',
 };
 
-// Mock Notifications Data
-const MOCK_NOTIFICATIONS_DATA = [
-  { id: 1, notification_id: 'NOT-001', recipient: 'john.smith@example.com', recipient_name: 'John Smith', type: 'Booking', service_type: 'Lesson', channel: 'Email', subject: 'Booking Confirmation', message: 'Your piano lesson is confirmed for Nov 24 at 3:00 PM', status: 'Sent', sent_at: '2025-11-23 10:30 AM', read_status: 'Read' },
-  { id: 2, notification_id: 'NOT-002', recipient: 'sarah.johnson@example.com', recipient_name: 'Sarah Johnson', type: 'Payment', service_type: 'Recording', channel: 'Both', subject: 'Payment Received', message: 'Your payment of $250 has been processed successfully', status: 'Sent', sent_at: '2025-11-23 09:15 AM', read_status: 'Read' },
-  { id: 3, notification_id: 'NOT-003', recipient: 'mike.chen@example.com', recipient_name: 'Mike Chen', type: 'Reminder', service_type: 'Mixing', channel: 'Socket.io', subject: 'Service Reminder', message: 'Your mixing session starts in 1 hour', status: 'Sent', sent_at: '2025-11-23 02:00 PM', read_status: 'Unread' },
-  { id: 4, notification_id: 'NOT-004', recipient: 'emma.davis@example.com', recipient_name: 'Emma Davis', type: 'Status Update', service_type: 'Lesson', channel: 'Email', subject: 'Lesson Status: In-Progress', message: 'Your lesson is currently in progress', status: 'Sent', sent_at: '2025-11-23 03:00 PM', read_status: 'Read' },
-  { id: 5, notification_id: 'NOT-005', recipient: 'james.wilson@example.com', recipient_name: 'James Wilson', type: 'System', service_type: 'Production', channel: 'Both', subject: 'Maintenance Notice', message: 'Studio equipment maintenance scheduled for Nov 25', status: 'Pending', sent_at: '2025-11-23 11:45 AM', read_status: 'Unread' },
-  { id: 6, notification_id: 'NOT-006', recipient: 'lisa.anderson@example.com', recipient_name: 'Lisa Anderson', type: 'Booking', service_type: 'Band Rehearsal', channel: 'Socket.io', subject: 'Booking Rescheduled', message: 'Your rehearsal has been rescheduled to Nov 25 at 5:00 PM', status: 'Failed', sent_at: '2025-11-23 08:20 AM', read_status: 'Unread' },
-  { id: 7, notification_id: 'NOT-007', recipient: 'robert.taylor@example.com', recipient_name: 'Robert Taylor', type: 'Payment', service_type: 'Lesson', channel: 'Email', subject: 'Invoice Available', message: 'Your invoice for lesson services is ready to download', status: 'Queued', sent_at: '2025-11-23 12:30 PM', read_status: 'Unread' },
-  { id: 8, notification_id: 'NOT-008', recipient: 'patricia.moore@example.com', recipient_name: 'Patricia Moore', type: 'Reminder', service_type: 'Recording', channel: 'Both', subject: '24 Hour Reminder', message: 'Your recording session is scheduled for tomorrow at 10:00 AM', status: 'Sent', sent_at: '2025-11-22 02:00 PM', read_status: 'Read' },
-];
-
 // Notification Templates
 const NOTIFICATION_TEMPLATES = [
   { id: 1, name: 'Booking Confirmation', trigger: 'booking_created', content: 'Your {{service}} is confirmed for {{date}} at {{time}}. QR Code: {{qr_code}}' },
@@ -173,73 +161,199 @@ const ReadStatusBadge = ({ readStatus }) => {
 
 // --- Template Modal Component ---
 const TemplateModal = ({ isOpen, onClose }) => {
-  const [selectedTemplate, setSelectedTemplate] = useState(NOTIFICATION_TEMPLATES[0]);
+  const [templates, setTemplates] = useState(() => {
+    const saved = localStorage.getItem('notificationTemplates');
+    return saved ? JSON.parse(saved) : NOTIFICATION_TEMPLATES;
+  });
+  const [selectedTemplate, setSelectedTemplate] = useState(templates[0]);
+  const [editContent, setEditContent] = useState(templates[0]?.content || '');
+  const [previewText, setPreviewText] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    if (selectedTemplate) {
+      setEditContent(selectedTemplate.content);
+      setPreviewText('');
+    }
+  }, [selectedTemplate]);
+
+  const handleSelectTemplate = (template) => {
+    setSelectedTemplate(template);
+    setEditContent(template.content);
+    setSaveMessage('');
+  };
+
+  const handleSaveTemplate = () => {
+    const updatedTemplates = templates.map(t =>
+      t.id === selectedTemplate.id
+        ? { ...t, content: editContent }
+        : t
+    );
+    setTemplates(updatedTemplates);
+    localStorage.setItem('notificationTemplates', JSON.stringify(updatedTemplates));
+    setSelectedTemplate({ ...selectedTemplate, content: editContent });
+    setSaveMessage('✅ Template saved successfully!');
+    setTimeout(() => setSaveMessage(''), 3000);
+  };
+
+  const handleResetTemplate = () => {
+    const originalTemplate = NOTIFICATION_TEMPLATES.find(t => t.id === selectedTemplate.id);
+    if (originalTemplate) {
+      setEditContent(originalTemplate.content);
+      setSelectedTemplate(originalTemplate);
+      setSaveMessage('');
+    }
+  };
+
+  const handlePreview = () => {
+    let preview = editContent;
+    preview = preview.replace(/\{\{service\}\}/g, 'Piano Lesson');
+    preview = preview.replace(/\{\{date\}\}/g, 'Nov 30, 2025');
+    preview = preview.replace(/\{\{time\}\}/g, '3:00 PM');
+    preview = preview.replace(/\{\{new_date\}\}/g, 'Dec 1, 2025');
+    preview = preview.replace(/\{\{new_time\}\}/g, '4:00 PM');
+    preview = preview.replace(/\{\{amount\}\}/g, '150');
+    preview = preview.replace(/\{\{qr_code\}\}/g, '[QR Code Image]');
+    preview = preview.replace(/\{\{invoice_number\}\}/g, 'INV-2025-001');
+    preview = preview.replace(/\{\{report_link\}\}/g, 'https://example.com/report');
+    setPreviewText(preview);
+    setShowPreview(true);
+  };
+
+  const copyVariable = (variable) => {
+    navigator.clipboard.writeText(variable);
+    setSaveMessage(`Copied ${variable}`);
+    setTimeout(() => setSaveMessage(''), 2000);
+  };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-[#2a2a2a] border border-[#444] rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-[#444]">
+      <div className="bg-[#2a2a2a] border border-[#444] rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-[#444] sticky top-0 bg-[#2a2a2a] z-10">
           <h3 className="text-xl font-bold text-white">Notification Templates</h3>
           <button onClick={onClose} className="text-[#bbb] hover:text-white">
             <X size={24} />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6">
+        {saveMessage && (
+          <div className="mx-6 mt-4 p-3 bg-green-900/30 border border-green-600 text-green-300 rounded-lg text-sm">
+            {saveMessage}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6">
           {/* Template List */}
           <div className="md:col-span-1 space-y-2">
-            {NOTIFICATION_TEMPLATES.map(template => (
+            <h4 className="text-sm font-semibold text-[#bfa45b] mb-3">Available Templates</h4>
+            {templates.map(template => (
               <button
                 key={template.id}
-                onClick={() => setSelectedTemplate(template)}
-                className={`w-full text-left p-3 rounded-lg transition-colors ${
-                  selectedTemplate.id === template.id
-                    ? 'bg-[#bfa45b] text-[#1b1b1b]'
-                    : 'bg-[#1b1b1b] border border-[#444] text-white hover:border-[#bfa45b]'
+                onClick={() => handleSelectTemplate(template)}
+                className={`w-full text-left p-3 rounded-lg transition-colors border ${
+                  selectedTemplate?.id === template.id
+                    ? 'bg-[#bfa45b] text-[#1b1b1b] border-[#bfa45b]'
+                    : 'bg-[#1b1b1b] border-[#444] text-white hover:border-[#bfa45b]'
                 }`}
               >
                 <p className="font-semibold text-sm">{template.name}</p>
-                <p className="text-xs opacity-70">{template.trigger}</p>
+                <p className="text-xs opacity-70 mt-1">{template.trigger}</p>
               </button>
             ))}
           </div>
 
           {/* Template Editor */}
-          <div className="md:col-span-2">
-            <div className="bg-[#1b1b1b] p-4 rounded-lg border border-[#444]">
-              <h4 className="font-bold text-[#bfa45b] mb-3">Template Content</h4>
-              <textarea
-                value={selectedTemplate.content}
-                onChange={(e) => setSelectedTemplate({ ...selectedTemplate, content: e.target.value })}
-                className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg p-3 text-white text-sm resize-none focus:border-[#bfa45b] focus:outline-none"
-                rows={8}
-              />
+          <div className="md:col-span-3">
+            <div className="bg-[#1b1b1b] p-4 rounded-lg border border-[#444] space-y-4">
+              <div>
+                <h4 className="font-bold text-[#bfa45b] mb-3">Template Content</h4>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => {
+                    setEditContent(e.target.value);
+                    setSaveMessage('');
+                  }}
+                  placeholder="Enter your notification template..."
+                  className="w-full bg-[#2a2a2a] border border-[#444] rounded-lg p-3 text-white text-sm resize-none focus:border-[#bfa45b] focus:outline-none"
+                  rows={8}
+                />
+              </div>
               
-              <div className="mt-4">
-                <h5 className="font-semibold text-[#bbb] text-sm mb-2">Available Variables:</h5>
-                <div className="grid grid-cols-2 gap-2 text-xs text-[#bbb]">
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{service}}'}</div>
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{date}}'}</div>
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{time}}'}</div>
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{amount}}'}</div>
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{qr_code}}'}</div>
-                  <div className="bg-[#1b1b1b] p-2 rounded border border-[#444]">{'{{invoice_number}}'}</div>
+              <div>
+                <h5 className="font-semibold text-[#bbb] text-sm mb-3">Available Variables (Click to copy):</h5>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                  {[
+                    { var: '{{service}}', desc: 'Service name (e.g., Piano Lesson)' },
+                    { var: '{{date}}', desc: 'Booking date' },
+                    { var: '{{time}}', desc: 'Session time' },
+                    { var: '{{amount}}', desc: 'Payment amount' },
+                    { var: '{{qr_code}}', desc: 'QR code placeholder' },
+                    { var: '{{invoice_number}}', desc: 'Invoice ID' },
+                    { var: '{{new_date}}', desc: 'Rescheduled date' },
+                    { var: '{{new_time}}', desc: 'Rescheduled time' },
+                    { var: '{{report_link}}', desc: 'Link to progress report' }
+                  ].map((item) => (
+                    <button
+                      key={item.var}
+                      onClick={() => copyVariable(item.var)}
+                      className="group bg-[#2a2a2a] hover:bg-[#3a3a3a] p-2.5 rounded border border-[#444] hover:border-[#bfa45b] transition-all duration-200 text-left cursor-pointer hover:shadow-lg hover:shadow-[#bfa45b]/20"
+                      title={`Click to copy ${item.var}`}
+                    >
+                      <div className="font-mono text-[#bfa45b] font-semibold text-xs mb-1 group-hover:text-[#cfb86b]">
+                        {item.var}
+                      </div>
+                      <div className="text-[#888] text-xs group-hover:text-[#bbb] transition-colors">
+                        {item.desc}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="mt-4 flex gap-2">
-                <button className="flex-1 bg-[#1b1b1b] border border-[#444] text-white hover:bg-[#3a3a3a] rounded-lg px-4 py-2 font-semibold text-sm transition-colors">
-                  Preview
+              <div className="flex gap-2 flex-wrap">
+                <button 
+                  onClick={handlePreview}
+                  className="flex-1 min-w-[150px] bg-[#1b1b1b] border border-[#444] text-white hover:bg-[#3a3a3a] hover:border-[#bfa45b] rounded-lg px-4 py-2 font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  <Eye size={16} /> Preview
                 </button>
-                <button className="flex-1 bg-[#bfa45b] text-[#1b1b1b] hover:bg-[#cfb86b] rounded-lg px-4 py-2 font-semibold text-sm transition-colors">
-                  Save Template
+                <button 
+                  onClick={handleResetTemplate}
+                  className="flex-1 min-w-[150px] bg-[#1b1b1b] border border-[#444] text-[#bbb] hover:bg-[#3a3a3a] hover:border-[#ff9f43] hover:text-[#ff9f43] rounded-lg px-4 py-2 font-semibold text-sm transition-colors"
+                >
+                  Reset to Default
+                </button>
+                <button 
+                  onClick={handleSaveTemplate}
+                  className="flex-1 min-w-[150px] bg-[#bfa45b] text-[#1b1b1b] hover:bg-[#cfb86b] rounded-lg px-4 py-2 font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  <CheckCircle size={16} /> Save Template
                 </button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Preview Modal */}
+        {showPreview && (
+          <div className="border-t border-[#444] p-6 bg-[#1b1b1b]">
+            <div className="flex items-center justify-between mb-4">
+              <h5 className="font-semibold text-[#bfa45b]">Template Preview</h5>
+              <button 
+                onClick={() => setShowPreview(false)}
+                className="text-[#bbb] hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="bg-[#2a2a2a] border border-[#444] rounded-lg p-4">
+              <p className="text-white text-sm whitespace-pre-wrap break-words">{previewText}</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -332,9 +446,10 @@ const AdminNotifications = () => {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+      const token = localStorage.getItem('token');
       if (!token) {
         console.log('❌ No token found');
+        setNotifications([]); // No fallback to mock data, show empty state
         setLoading(false);
         return;
       }
@@ -351,7 +466,7 @@ const AdminNotifications = () => {
         const data = await response.json();
         console.log('📦 Fetched notifications:', data);
         
-        if (data.success && data.data?.notifications) {
+        if (data.success && data.data?.notifications && data.data.notifications.length > 0) {
           // Transform database notifications to UI format
           const transformed = data.data.notifications.map((n, idx) => ({
             id: n.id || idx + 1,
@@ -370,12 +485,18 @@ const AdminNotifications = () => {
           
           setNotifications(transformed);
           console.log('✅ Transformed notifications:', transformed);
+        } else {
+          // No real data, use mock
+          console.log('ℹ️ No notifications from API, using mock data');
+          setNotifications([]);
         }
       } else {
         console.error('❌ API error:', response.status);
+        setNotifications([]); // No fallback on error
       }
     } catch (error) {
       console.error('💥 Error fetching notifications:', error);
+      setNotifications([]); // No fallback on error
     } finally {
       setLoading(false);
     }
@@ -396,12 +517,17 @@ const AdminNotifications = () => {
 
       if (response.ok) {
         const data = await response.json();
-        if (data.data?.unreadCount !== undefined) {
-          setUnreadCount(data.data.unreadCount);
+        if (data.data?.notifications) {
+          const unread = data.data.notifications.filter(n => !n.is_read).length;
+          setUnreadCount(unread);
         }
       }
     } catch (error) {
       console.error('Error fetching unread notification count:', error);
+      // Calculate from notifications state as fallback
+      if (notifications.length > 0) {
+        setUnreadCount(notifications.filter(n => n.read_status === 'Unread').length);
+      }
     }
   };
 

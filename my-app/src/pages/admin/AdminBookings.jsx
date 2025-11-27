@@ -30,9 +30,6 @@ import {
 import { formatCurrentDateTime } from '../../utils/timeUtils';
 import NotificationDropdown from '../../components/NotificationDropdown';
 
-// Base URL for admin API
-const API_BASE_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/admin` : 'http://localhost:5000/api/admin';
-
 const AdminBookings = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,7 +90,7 @@ const AdminBookings = () => {
       });
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings?${queryParams}`, {
+      const response = await fetch(`/api/admin/bookings?${queryParams}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -178,7 +175,7 @@ const AdminBookings = () => {
   const handleConfirmBooking = async (bookingId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/confirm`, {
+      const response = await fetch(`/api/admin/bookings/${bookingId}/confirm`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -201,7 +198,7 @@ const AdminBookings = () => {
   const handleCheckInBooking = async (bookingId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/checkin`, {
+      const response = await fetch(`/api/admin/bookings/${bookingId}/checkin`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -228,7 +225,7 @@ const AdminBookings = () => {
       
       if (xpAwarded === null) return; // User cancelled
 
-      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/complete`, {
+      const response = await fetch(`/api/admin/bookings/${bookingId}/complete`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -258,7 +255,7 @@ const AdminBookings = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
+      const response = await fetch(`/api/admin/bookings/${bookingId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -402,11 +399,9 @@ const AdminBookings = () => {
 
   // Handle time slot selection
   const handleTimeSlotChange = (slot) => {
-    // slot expected shape: { display: '8:00 AM - 9:00 AM', start24: '08:00' }
     setFormData(prev => ({
       ...prev,
-      timeSlot: slot.display,
-      startTime24: slot.start24
+      timeSlot: slot.display
     }));
   };
 
@@ -528,14 +523,12 @@ const AdminBookings = () => {
               <Menu size={24} />
             </button>
 
-            <h2 className="text-xl font-semibold text-white">Bookings</h2>
-          </div>
-          
-          {/* Header Middle - Timezone/Time */}
-          <div className="hidden md:flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock size={12} />
-              <span>{formatCurrentDateTime()}</span>
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-xl font-semibold text-white">Bookings</h2>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                <Clock size={12} />
+                <span>{formatCurrentDateTime()}</span>
+              </div>
             </div>
           </div>
           
@@ -1201,7 +1194,12 @@ const AdminBookings = () => {
                 <button
                   type="button"
                   disabled={!formData.service || !formData.duration || !formData.date || !formData.timeSlot}
-                  onClick={handleCreateBooking}
+                  onClick={() => {
+                    alert(`Booking created:\nService: ${formData.service}\nDuration: ${formData.duration} min\nDate: ${formData.date}\nTime: ${formData.timeSlot}`);
+                    setIsModalOpen(false);
+                    setFormData({ service: '', duration: '', date: '', timeSlot: '' });
+                    setAvailableSlots([]);
+                  }}
                   className="px-4 py-2 rounded-lg bg-[#ffb400] text-[#1b1b1b] font-semibold hover:bg-[#ffc400] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Create Booking

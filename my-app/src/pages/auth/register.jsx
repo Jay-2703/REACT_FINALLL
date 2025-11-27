@@ -331,7 +331,10 @@ export default function Register() {
               </div>
 
               <p className="text-center text-[#bbb] mt-4 text-sm">
-                Already have an account? <a href="#" className="text-[#ffd700] hover:underline font-semibold">Login here</a>
+                Already have an account?{' '}
+                <a href="/auth/login" className="text-[#ffd700] hover:underline font-semibold">
+                  Login here
+                </a>
               </p>
             </div>
           </>

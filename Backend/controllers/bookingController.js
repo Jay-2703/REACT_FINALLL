@@ -289,21 +289,42 @@ export const createBooking = async (req, res) => {
       if (service) {
         serviceId = service.service_id;
       } else {
-        // If no exact match, get the first active service as fallback
-        const fallbackServiceResult = await query(
-          'SELECT service_id FROM services WHERE is_active = 1 LIMIT 1'
+        const fallbackResult = await query(
+          `SELECT service_id FROM services 
+           WHERE LOWER(service_name) = LOWER(?) 
+           OR LOWER(instrument) = LOWER(?) 
+           OR service_name LIKE ? 
+           LIMIT 1`,
+          [serviceType, serviceType, `%${serviceType}%`]
         );
-        const fallbackService = fallbackServiceResult && fallbackServiceResult[0];
-        serviceId = fallbackService?.service_id || null;
+        const fallbackService = fallbackResult && fallbackResult[0];
+        if (fallbackService) {
+          serviceId = fallbackService.service_id;
+        } else {
+          const lastResortResult = await query(
+            'SELECT service_id FROM services WHERE is_active = 1 LIMIT 1'
+          );
+          serviceId = lastResortResult?.[0]?.service_id || null;
+        }
       }
     } catch (err) {
       console.error('Error fetching service:', err);
     }
 
     if (!serviceId) {
+      try {
+        const availableServices = await query(
+          'SELECT service_id, service_name, instrument FROM services'
+        );
+        console.error('Service lookup failed for:', serviceType);
+        console.error('Available services:', availableServices);
+      } catch (logErr) {
+        console.error('Failed to log available services:', logErr);
+      }
+
       return res.status(400).json({
         success: false,
-        message: 'Service not found'
+        message: `Service "${serviceType}" not found. Please contact support.`
       });
     }
 
@@ -330,6 +351,38 @@ export const createBooking = async (req, res) => {
     );
     
     const bookingId = result.insertId;
+
+    // If payment method is Cash, mark as paid immediately and generate QR code
+    if (paymentMethod === 'Cash') {
+      try {
+        // Update payment status to paid
+        await query(
+          'UPDATE bookings SET payment_status = "paid" WHERE booking_id = ?',
+          [bookingId]
+        );
+
+        // Generate QR code for this booking if qrService is available
+        if (qrService && typeof qrService.generateBookingQR === 'function') {
+          const qrResult = await qrService.generateBookingQR({
+            booking_id: bookingId,
+            booking_date: bookingDate,
+            booking_time: startTime,
+            service_type: serviceType,
+          });
+
+          if (qrResult && qrResult.success) {
+            await query(
+              'UPDATE bookings SET qr_code_path = ?, qr_code_data = ? WHERE booking_id = ?',
+              [qrResult.qrPath, qrResult.qrDataUrl, bookingId]
+            );
+          } else {
+            console.warn('QR generation failed for cash booking', bookingId, qrResult?.error);
+          }
+        }
+      } catch (qrCashErr) {
+        console.warn('Error handling cash payment QR generation:', qrCashErr.message);
+      }
+    }
 
     let paymentUrl = null;
     let invoiceCreated = false;
@@ -400,6 +453,18 @@ export const createBooking = async (req, res) => {
       console.warn('Failed to send admin notification:', notifErr.message);
     }
 
+    if (userId) {
+      try {
+        await notifyUser(
+          userId,
+          'booking_confirmed',
+          `Your ${serviceType} booking on ${bookingDate} at ${startTime} has been confirmed!`
+        );
+      } catch (userNotifErr) {
+        console.warn('Failed to send user booking notification:', userNotifErr.message);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
@@ -464,8 +529,28 @@ export const getBookingById = async (req, res) => {
     const { bookingId } = req.params;
 
     const bookings = await query(
-      `SELECT * FROM bookings 
-       WHERE booking_id = ?`,
+      `SELECT 
+         b.booking_id,
+         b.booking_reference,
+         b.booking_date,
+         b.start_time,
+         b.duration_minutes,
+         b.status,
+         b.payment_status,
+         b.qr_code,
+         b.user_notes,
+         b.created_at,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.contact,
+         s.service_name,
+         s.instrument
+       FROM bookings b
+       LEFT JOIN users u ON b.user_id = u.id
+       LEFT JOIN services s ON b.service_id = s.service_id
+       WHERE b.booking_id = ?
+       LIMIT 1`,
       [bookingId]
     );
 
@@ -478,22 +563,66 @@ export const getBookingById = async (req, res) => {
 
     const booking = bookings[0];
 
+    // Fallback: generate QR code if paid booking has no QR yet (for manually inserted rows)
+    if (booking.payment_status === 'paid' && !booking.qr_code_data && qrService && typeof qrService.generateBookingQR === 'function') {
+      try {
+        console.log(`🔄 Generating missing QR for booking ${booking.booking_id}...`);
+        const qrResult = await qrService.generateBookingQR({
+          booking_id: booking.booking_id,
+          booking_date: booking.booking_date,
+          booking_time: booking.start_time,
+          service_type: booking.service_type || booking.instrument,
+        });
+        if (qrResult && qrResult.success) {
+          await query(
+            'UPDATE bookings SET qr_code_path = ?, qr_code_data = ? WHERE booking_id = ?',
+            [qrResult.qrPath, qrResult.qrDataUrl, booking.booking_id]
+          );
+          booking.qr_code_path = qrResult.qrPath;
+          booking.qr_code_data = qrResult.qrDataUrl;
+          console.log(`✅ QR generated and saved for booking ${booking.booking_id}`);
+        } else {
+          console.warn(`⚠️ QR generation failed for booking ${booking.booking_id}:`, qrResult?.error);
+        }
+      } catch (err) {
+        console.warn('QR fallback error:', err.message);
+      }
+    }
+
+    let notes = {};
+    try {
+      notes = booking.user_notes ? JSON.parse(booking.user_notes) : {};
+    } catch (e) {
+      notes = {};
+    }
+
+    const serviceKey = notes.original_service || booking.instrument || null;
+    const hours = booking.duration_minutes ? booking.duration_minutes / 60 : 1;
+    const totalPrice = serviceKey ? calculateAmount(serviceKey, hours) : 0;
+
+    const fullName = (booking.first_name || booking.last_name)
+      ? `${booking.first_name || ''} ${booking.last_name || ''}`.trim()
+      : null;
+
+    const bookingDateStr = booking.booking_date instanceof Date
+      ? booking.booking_date.toISOString().split('T')[0]
+      : booking.booking_date;
+
     res.json({
       success: true,
       data: {
         booking_id: booking.booking_id,
-        name: booking.name,
+        name: fullName,
         email: booking.email,
         contact: booking.contact,
-        service_type: booking.service_type,
-        booking_date: booking.booking_date,
-        booking_time: booking.booking_time,
-        hours: booking.hours,
-        members: booking.members,
-        payment_method: booking.payment_method,
+        service_type: serviceKey,
+        booking_date: bookingDateStr,
+        booking_time: booking.start_time,
+        hours,
+        payment_method: notes.payment_method || null,
         payment_status: booking.payment_status,
-        total_price: booking.total_price,
-        qr_code_data: booking.qr_code_data,
+        total_price: totalPrice,
+        qr_code_url: booking.qr_code_data || booking.qr_code_path || booking.qr_code,
         created_at: booking.created_at
       }
     });

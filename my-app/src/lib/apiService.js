@@ -129,6 +129,24 @@ export const apiService = {
     return response.data;
   },
 
+  /**
+   * Get user learning progress and gamification stats
+   * GET /api/lessons/progress
+   */
+  getUserProgress: async () => {
+    const response = await api.get('/lessons/progress');
+    return response.data;
+  },
+
+  /**
+   * Get all active badge definitions
+   * GET /api/lessons/badges
+   */
+  getAllBadges: async () => {
+    const response = await api.get('/lessons/badges');
+    return response.data;
+  },
+
   // ==================== BOOKINGS ====================
   
   /**

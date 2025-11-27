@@ -36,49 +36,6 @@ const BASE_CLASSES = {
     BORDER: 'border-[#444]',
 };
 
-// --- Dummy/Initial Data Structure (Will be overwritten by API) ---
-
-const initialMetrics = {
-  totalUsers: '2,847', userGrowth: '+12.5%',
-  totalAppointments: '156', appointmentGrowth: '+8.2%',
-  completedLessons: '24', newLessons: '4 new this month',
-  monthlyRevenue: '₱45.8K', revenueGrowth: '+15.3%',
-  engagementRate: '87.4%', engagementGrowth: '+3.1%'
-};
-
-const initialRevenueData = {
-    labels: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    datasets: [{
-        label: 'Revenue',
-        data: [12, 19, 3, 5, 20], // Example data in K
-    }],
-};
-
-const initialEngagementData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    datasets: [
-        { label: 'Active Users', data: [65, 59, 80, 81, 56, 55, 40] },
-        { label: 'Lessons Completed', data: [28, 48, 40, 19, 86, 27, 90] },
-    ],
-};
-
-const dummyBookings = [
-    { booking_id: '001', customer_name: 'John Doe', service_type: 'Vocal Recording', days: '2 hrs', status: 'Confirmed' },
-    { booking_id: '002', customer_name: 'Jane Smith', service_type: 'Band Recording', days: '3 hrs', status: 'Pending' },
-    { booking_id: '003', customer_name: 'Alice Brown', service_type: 'Podcast', days: '1 hr', status: 'Confirmed' },
-    { booking_id: '004', customer_name: 'Bob White', service_type: 'Mixing & Mastering', days: '4 hrs', status: 'Cancelled' },
-    { booking_id: '005', customer_name: 'Charlie Green', service_type: 'Vocal Recording', days: '2 hrs', status: 'Confirmed' },
-];
-
-const dummyUsers = [
-    { first_name: 'Alice', last_name: 'Johnson', email: 'alice@mail.com', total_points: 150, is_verified: true },
-    { first_name: 'Mark', last_name: 'Davis', email: 'mark@mail.com', total_points: 80, is_verified: false },
-    { first_name: 'Sara', last_name: 'Lee', email: 'sara@mail.com', total_points: 320, is_verified: true },
-    { first_name: 'Tom', last_name: 'Wilson', email: 'tom@mail.com', total_points: 0, is_verified: true },
-];
-
-const calendarEvents = [5, 10]; // Days with events
-
 // --- Reusable Component Definitions ---
 
 const MetricIcon = ({ icon: Icon }) => (
@@ -160,13 +117,13 @@ const AdminDashboard = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
-  const [metrics, setMetrics] = useState(initialMetrics);
-  const [revenueChartData, setRevenueChartData] = useState(initialRevenueData);
-  const [engagementChartData, setEngagementChartData] = useState(initialEngagementData);
+  const [metrics, setMetrics] = useState({});
+  const [revenueChartData, setRevenueChartData] = useState(null);
+  const [engagementChartData, setEngagementChartData] = useState(null);
   const [bookingsByServiceData, setBookingsByServiceData] = useState(null);
   const [studentActivityData, setStudentActivityData] = useState(null);
-  const [bookings, setBookings] = useState(dummyBookings);
-  const [recentUsers, setRecentUsers] = useState(dummyUsers);
+  const [bookings, setBookings] = useState([]);
+  const [recentUsers, setRecentUsers] = useState([]);
   const [topStudents, setTopStudents] = useState([]);
   const [registrationNotifications, setRegistrationNotifications] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -317,10 +274,9 @@ const AdminDashboard = () => {
 
     switch(preset) {
       case 'Today':
-      case 'Yesterday':
         isShortRange = true;
         break;
-      case 'Last 7 Days':
+      case 'Week':
         startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case 'Last 30 Days':
@@ -468,21 +424,22 @@ const AdminDashboard = () => {
       case 'Today':
         start = new Date(today);
         break;
-      case 'Yesterday':
-        start = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-        break;
-      case 'Last 7 Days':
+      case 'Week':
         start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'Last 30 Days':
-        start = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       case 'This Month':
         start = new Date(today.getFullYear(), today.getMonth(), 1);
         break;
       case 'Last Month':
         start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-        break;
+        const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        setDateRange({
+          start: start.toISOString().split('T')[0],
+          end: endOfLastMonth.toISOString().split('T')[0]
+        });
+        setSelectedDatePreset(preset);
+        setIsLoadingCharts(true);
+        return;
       default:
         break;
     }
@@ -492,16 +449,6 @@ const AdminDashboard = () => {
       end: today.toISOString().split('T')[0]
     });
     setSelectedDatePreset(preset);
-
-    // Automatically refresh charts with new date range
-    setIsLoadingCharts(true);
-    setTimeout(() => {
-      setRevenueChartData(generateRevenueData(preset));
-      setBookingsByServiceData(generateBookingsByServiceData(preset));
-      setStudentActivityData(generateStudentActivityData(preset));
-      setLastUpdated(new Date());
-      setIsLoadingCharts(false);
-    }, 300); // Simulate API call delay
   };
 
   const handleRefresh = () => {
@@ -551,7 +498,7 @@ const AdminDashboard = () => {
             fill: true,
             tension: 0.4
         }],
-    } : initialRevenueData;
+    } : null;
 
     // Engagement Chart Data
     const formattedEngagement = engagementData ? {
@@ -570,7 +517,7 @@ const AdminDashboard = () => {
                 borderRadius: 8
             }
         ],
-    } : initialEngagementData;
+    } : null;
 
     setRevenueChartData(formattedRevenue);
     setEngagementChartData(formattedEngagement);
@@ -596,7 +543,24 @@ const AdminDashboard = () => {
     }
 
     try {
-      const period = selectedDatePreset === 'Last 7 Days' ? 'week' : 'month';
+      // Map preset to period for API calls
+      let period = 'month';
+      switch(selectedDatePreset) {
+        case 'Today':
+          period = 'today';
+          break;
+        case 'Week':
+          period = 'week';
+          break;
+        case 'This Month':
+          period = 'month';
+          break;
+        case 'Last Month':
+          period = 'lastMonth';
+          break;
+        default:
+          period = 'month';
+      }
       
       // Fetch all dashboard statistics in parallel
       const [revenueRes, appointmentsRes, studentsRes, completionRes, trendRes, serviceRes, segmentationRes, dauRes, topStudentsRes, recentUsersRes, registrationsRes, scheduleRes] = await Promise.all([
@@ -668,7 +632,7 @@ const AdminDashboard = () => {
           }],
         });
       } else {
-        setRevenueChartData(initialRevenueData);
+        setRevenueChartData(null);
       }
 
       // Process bookings by service
@@ -676,6 +640,7 @@ const AdminDashboard = () => {
         const serviceData = await serviceRes.json();
         const data = Array.isArray(serviceData.data) ? serviceData.data : [];
         if (data.length > 0) {
+          const totalBookings = data.reduce((sum, s) => sum + (s.count || 0), 0);
           setBookingsByServiceData({
             labels: data.map(s => s.service_name || 'Unknown'),
             datasets: [{
@@ -683,7 +648,7 @@ const AdminDashboard = () => {
               data: data.map(s => s.count || 0),
               backgroundColor: ['#ffb400', '#ff6b6b', '#4ade80', '#3b82f6', '#ec4899']
             }],
-            percentages: data.map(s => parseFloat(s.percentage || 0).toFixed(1))
+            percentages: data.map(s => totalBookings > 0 ? ((s.count || 0) / totalBookings * 100).toFixed(1) : 0)
           });
         }
       }
@@ -742,58 +707,598 @@ const AdminDashboard = () => {
       } else {
         setEngagementChartData(initialEngagementData);
       }
-    } catch (error) {
-      console.error(error);
-    }
-  }, [selectedDatePreset, dateRange, initialRevenueData, initialEngagementData]);
 
-  // ... rest of the code remains the same ...
+      // Process top students
+      if (topStudentsRes.ok) {
+        const topStudentsData = await topStudentsRes.json();
+        const list = Array.isArray(topStudentsData.data) ? topStudentsData.data : [];
+        const mappedStudents = list.map((s, index) => ({
+          rank: s.rank ?? index + 1,
+          name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Unknown',
+          level: s.level || s.current_level || 1,
+          xp: s.total_xp || s.total_points || 0,
+          modules: s.modules_completed || 0,
+          badges: s.badges_count || 0,
+          lastActive: s.last_active
+            ? new Date(s.last_active).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'N/A',
+        }));
+        setTopStudents(mappedStudents);
+      } else {
+        setTopStudents([]);
+      }
+
+      // Process recent users
+      if (recentUsersRes.ok) {
+        const recentUsersData = await recentUsersRes.json();
+        const userData = Array.isArray(recentUsersData.data) ? recentUsersData.data : [];
+        setRecentUsers(userData.map(user => ({
+          name: `${user.user_name || user.first_name || 'Unknown'} ${user.last_name || ''}`.trim(),
+          level: user.level || user.current_level || 1,
+          points: user.points || user.total_xp || 0,
+          email: user.email || '',
+          status: user.status || 'inactive'
+        })));
+      } else {
+        setRecentUsers([]);
+      }
+
+      // Process new registrations
+      if (registrationsRes.ok) {
+        const registrationsData = await registrationsRes.json();
+        const notificationsArray = Array.isArray(registrationsData.data?.registrations) 
+          ? registrationsData.data.registrations 
+          : [];
+        setRegistrationNotifications(notificationsArray);
+      } else {
+        setRegistrationNotifications([]);
+      }
+
+      // Process todays schedule
+      if (scheduleRes.ok) {
+        const scheduleData = await scheduleRes.json();
+        console.log('Schedule API response:', scheduleData);
+        const schedule = Array.isArray(scheduleData.data) ? scheduleData.data : [];
+        console.log('Formatted schedule:', schedule);
+        const formattedSchedule = schedule.map(booking => ({
+          booking_id: booking.booking_id,
+          customer_name: booking.student_name || 'Unknown',
+          instructor_name: booking.instructor_name || 'Unknown',
+          service_type: booking.service_name || 'Service',
+          start_time: booking.start_time || 'N/A',
+          end_time: booking.end_time || 'N/A',
+          status: booking.status || 'pending'
+        }));
+        setBookings(formattedSchedule);
+      } else {
+        const errorText = await scheduleRes.text();
+        console.error('Schedule API error:', scheduleRes.status, errorText);
+        setBookings([]);
+      }
+
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Set fallback state to empty arrays
+      setRecentUsers([]);
+      setRegistrationNotifications([]);
+      setBookings([]);
+      // Log individual error details for debugging
+      if (error.message) console.error('Error message:', error.message);
+      if (error.stack) console.error('Stack trace:', error.stack);
+    }
+  }, [selectedDatePreset, dateRange]);
+
+  // Fetch bookings from database (replaced by todays-schedule endpoint)
+  // This is now handled in loadDashboardData
+  const loadBookingsData = useCallback(async () => {
+    // No longer needed - data is fetched in loadDashboardData
+  }, []);
+
+  // --- Lifecycle and Polling ---
+
+  useEffect(() => {
+    loadDashboardData();
+    loadBookingsData();
+    // Set up refresh interval (5 minutes)
+    const intervalId = setInterval(() => {
+      loadDashboardData();
+      loadBookingsData();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(intervalId); // Cleanup on unmount
+  }, [loadDashboardData, loadBookingsData]);
+
+
+  // --- Calendar Logic ---
+
+  const handlePrevMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCurrentCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const generateCalendar = useCallback(() => {
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
+
+    // Empty days (padding)
+    for (let i = 0; i < firstDayOfMonth; i++) {
+      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isToday = isCurrentMonth && day === today.getDate();
+      const hasEvent = calendarEvents.includes(day);
+
+      days.push(
+        <div 
+          key={day}
+          className={`aspect-square flex items-center justify-center text-sm rounded-lg cursor-pointer relative transition duration-200 
+            ${isToday ? `${BASE_CLASSES.ACCENT_BG} text-gray-900 font-bold` : `${BASE_CLASSES.TEXT_LIGHT} hover:bg-white/5`}
+            ${hasEvent ? 'before:content-[""] before:absolute before:bottom-1 before:w-1 before:h-1 before:bg-amber-400 before:rounded-full' : ''}
+          `}
+        >
+          {day}
+        </div>
+      );
+    }
+    return days;
+  }, [currentCalendarDate]);
+  
+  // --- UI/Layout Toggles ---
+
+  const toggleSidebar = () => {
+    if (window.innerWidth >= 768) {
+      setIsCollapsed(prev => !prev);
+    } else {
+      setIsMobileOpen(prev => !prev);
+    }
+  };
+
+  const closeMobileSidebar = () => {
+    setIsMobileOpen(false);
+  };
+
+  const sidebarWidth = isCollapsed ? '66px' : '250px';
+  const headerHeight = '64px';
+
+  // Map selected date preset to backend period for KPI cards and stats
+  const currentPeriod = selectedDatePreset === 'Today'
+    ? 'today'
+    : selectedDatePreset === 'Week'
+      ? 'week'
+      : selectedDatePreset === 'Last Month'
+        ? 'lastMonth'
+        : 'month';
+
+
+  // Combine metric data for rendering
+  // Sparkline data for each KPI card
+  const sparklineData = {
+    revenue: [
+      { value: 8000 }, { value: 9500 }, { value: 11000 }, { value: 10500 }, { value: 12000 }, { value: 12450 }
+    ],
+    users: [
+      { value: 2400 }, { value: 2500 }, { value: 2600 }, { value: 2700 }, { value: 2800 }, { value: 2847 }
+    ],
+    bookings: [
+      { value: 120 }, { value: 130 }, { value: 140 }, { value: 145 }, { value: 150 }, { value: 156 }
+    ],
+    lessons: [
+      { value: 15 }, { value: 18 }, { value: 20 }, { value: 22 }, { value: 23 }, { value: 24 }
+    ]
+  };
+
 
   return (
-    <div className="flex flex-col h-screen">
-      <Header />
-      <main className="flex-1 p-6">
-        {/* Recent Users Section */}
-        <div className="grid gap-5 mb-6">
-          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 hover:border-[#ffb400] hover:shadow-lg hover:shadow-[#ffb400]/30 transition duration-200`}>
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-lg font-semibold text-white">Recent Users</h3>
-              <a href="/admin/users" className="text-xs text-[#ffb400] hover:text-[#ffed4e] transition">View All →</a>
+    <div className="min-h-screen bg-gradient-to-br from-[#2a2a2a] to-[#1b1b1b] text-white font-sans overflow-x-hidden">  
+
+      {/* Sidebar Overlay (Mobile) */}
+      <div 
+        className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 ${isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={closeMobileSidebar}
+      ></div>
+
+      {/* Sidebar */}
+      <aside 
+        id="sidebar" 
+        className={`fixed top-0 left-0 z-50 h-screen bg-[#2c2c3a] text-white transition-all duration-300 ease-in-out flex flex-col gap-4 py-6 px-4 overflow-y-auto
+        ${isCollapsed ? 'w-[66px] px-2' : 'w-[250px]'} 
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
+        aria-label="Primary"
+      >
+        
+        {/* Profile Section */}
+        <div className="flex items-center gap-3 pb-3 border-b border-[#444]">
+          <div 
+            className="w-11 h-11 rounded-full bg-[#ffb400] flex items-center justify-center font-bold text-[#1b1b1b] flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+            onClick={() => navigate('/admin/profile')}
+          >AD</div>
+          <div className={`leading-snug transition-opacity duration-250 ${isCollapsed ? 'hidden' : 'block'}`}>  
+            <div className="font-bold text-sm text-white">Admin User</div>
+            <div className="text-xs text-[#bbb]">Administrator</div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 flex flex-col gap-1.5 mt-1.5" aria-label="Main navigation">
+          {[
+            { icon: LayoutDashboard, label: 'Dashboard', nav: 'dashboard', path: '/admin/dashboard' },
+            { icon: Users, label: 'Users', nav: 'users', path: '/admin/users' },
+            { icon: Calendar, label: 'Bookings', nav: 'bookings', path: '/admin/bookings' },
+            { icon: BookOpen, label: 'Modules & Lessons', nav: 'modules', path: '/admin/modules' },
+            { icon: UserCheck, label: 'Instructors', nav: 'instructors', path: '/admin/instructors' },
+            { icon: CreditCard, label: 'Payments', nav: 'payments', path: '/admin/payments' },
+            { icon: Bell, label: 'Notifications', nav: 'notifications', path: '/admin/notifications' },
+            { icon: Activity, label: 'Activity Logs', nav: 'activity', path: '/admin/activity' },
+            { icon: FileText, label: 'Reports', nav: 'reports', path: '/admin/reports' },
+            { icon: Settings, label: 'Profile', nav: 'profile', path: '/admin/profile' }
+          ].map((item) => {
+            const Icon = item.icon;
+            const isActive = activeNav === item.nav;
+            const activeClasses = isActive ? 'bg-[#1b1b1b] text-[#bfa45b] font-semibold' : '';
+            return (
+              <button 
+                key={item.nav}
+                className={`flex items-center justify-start gap-3 p-2.5 border-none rounded-lg text-sm text-white transition duration-200 whitespace-nowrap hover:bg-[#23233a] ${activeClasses} ${isCollapsed ? 'justify-center p-2.5' : ''}`}
+                onClick={() => {
+                  navigate(item.path);
+                  if (window.innerWidth <= 768) setIsMobileOpen(false);
+                }}
+              >
+                <Icon className={`w-5 h-5 flex-shrink-0 text-[#bfa45b]`} />
+                <span className={`transition-opacity duration-250 ${isCollapsed ? 'hidden' : 'block'}`}>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Logout */}
+        <button 
+          className={`mt-auto flex items-center gap-3 bg-transparent border-none text-[#bfa45b] p-2.5 text-sm cursor-pointer rounded-lg transition duration-200 hover:bg-red-600 hover:text-white ${isCollapsed ? 'justify-center' : ''}`}
+          onClick={() => {
+            if (window.confirm('Are you sure you want to logout?')) {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              navigate('/auth/login');
+            }
+          }}
+        >
+          <LogOut className="w-5 h-5" />
+          <span className={`${isCollapsed ? 'hidden' : 'block'}`}>Logout</span>
+        </button>
+      </aside>
+
+      {/* Main Layout Wrapper */}
+      <div className={`transition-all duration-300 ${isCollapsed ? 'md:ml-[66px]' : 'md:ml-[250px]'}`}>
+        
+        {/* Header */}
+        <header className={`fixed top-0 right-0 z-30 bg-gradient-to-r from-[#23233a] to-[#1b1b1b] border-b border-[#444] shadow-lg transition-all duration-300
+          ${isCollapsed ? 'left-[66px]' : 'left-0 md:left-[250px]'}
+        `}>
+          {/* Top Row - Title and Controls */}
+          <div className="h-16 flex items-center justify-between px-6">
+            <div className="flex items-center gap-4">
+              {/* Mobile Toggle */}
+              <button 
+                onClick={toggleSidebar}
+                className="md:hidden text-[#bfa45b] p-1"
+                aria-label="Toggle menu"
+              >
+                <Menu size={28} />
+              </button>
+              
+              {/* Desktop Collapse Toggle */}
+              <button 
+                onClick={toggleSidebar}
+                className="hidden md:flex text-[#bfa45b] hover:text-[#cfb86b]"
+              >
+                <Menu size={24} />
+              </button>
+
+              <div className="flex flex-col gap-0.5">
+                <h2 className="text-xl font-bold text-white">Dashboard Overview</h2>
+                <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                  <Clock size={12} />
+                  <span>{formatCurrentDateTime()}</span>
+                </div>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-left bg-white/5 rounded-tl-xl">User</th>
-                    <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-left bg-white/5">Level/Points</th>
-                    <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-left bg-white/5">Email</th>
-                    <th className="p-4 text-sm font-semibold text-gray-400 uppercase tracking-wider text-left bg-white/5 rounded-tr-xl">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Array.isArray(recentUsers) && recentUsers.length > 0 ? (
-                      recentUsers.map((user, index) => (
-                          <UserRow 
-                              key={index} 
-                              name={user.name || 'Unknown'} 
-                              email={user.email || 'N/A'} 
-                              points={user.points || 0}
-                              level={user.level || 1}
-                              status={user.status || 'inactive'}
-                          />
-                      ))
-                  ) : (
-                      <tr><td colSpan="4" className="text-center text-gray-400 p-5">No recent users.</td></tr>
-                  )}
-                </tbody>
-              </table>
+
+            {/* Header Right - Date Range, Notifications, Refresh and Export */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+              {/* Date Range Presets - Moved to Header */}
+              <div className="hidden md:flex gap-1.5">
+                {['Today', 'Week', 'This Month', 'Last Month'].map((preset) => (
+                  <button 
+                    key={preset}
+                    onClick={() => handleDatePreset(preset)}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition duration-200 ${
+                      selectedDatePreset === preset
+                        ? 'bg-[#bfa45b] text-[#1b1b1b] shadow-lg'
+                        : 'bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#bfa45b] hover:text-[#bfa45b]'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+
+              {/* Notifications */}
+              <NotificationDropdown isAdmin={true} />
+              
+              {/* Last Updated */}
+              <button 
+                onClick={handleRefresh}
+                className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-[#2a2a2a] border border-[#444] hover:border-[#bfa45b] text-xs text-gray-300 hover:text-[#bfa45b] transition duration-200 group"
+                title="Refresh dashboard data"
+              >
+                <RefreshCw size={14} className="group-hover:rotate-180 transition duration-300" />
+                <span className="hidden lg:block">{getTimeAgo(lastUpdated)}</span>
+              </button>
+              
+              {/* Export Dropdown */}
+              <div className="relative group">
+                <button className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-[#bfa45b] hover:bg-[#cfb86b] text-[#1b1b1b] text-sm font-semibold transition duration-200">
+                  <Download size={14} />
+                  <span className="hidden lg:block">Export</span>
+                </button>
+                <div className="absolute right-0 mt-2 w-32 bg-[#2a2a2a] border border-[#444] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition duration-200 z-50">
+                  <button 
+                    onClick={() => exportReport('PDF')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-[#bfa45b] hover:text-[#1b1b1b] border-b border-[#444] transition duration-150 rounded-t-lg"
+                  >
+                    Export PDF
+                  </button>
+                  <button 
+                    onClick={() => exportReport('Excel')}
+                    className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-[#bfa45b] hover:text-[#1b1b1b] transition duration-150 rounded-b-lg"
+                  >
+                    Export Excel
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Mobile Date Range Presets - Only visible on mobile */}
+          <div className="md:hidden border-t border-[#444] px-6 py-3 overflow-x-auto">
+            <div className="flex gap-2 min-w-max">
+              {['Today', 'Week', 'This Month', 'Last Month'].map((preset) => (
+                <button 
+                  key={preset}
+                  onClick={() => handleDatePreset(preset)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition duration-200 ${
+                    selectedDatePreset === preset
+                      ? 'bg-[#bfa45b] text-[#1b1b1b] shadow-lg'
+                      : 'bg-[#2a2a2a] border border-[#444] text-gray-300 hover:border-[#bfa45b] hover:text-[#bfa45b]'
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+        </header>
+
+        {/* Content Area */}
+        <main className="mt-16 p-6 min-h-[calc(100vh-64px)]">
+
+        {/* All 4 KPI Cards - Single Row (connected to backend period) */}
+        <div className="grid gap-5 mb-6 md:grid-cols-2 lg:grid-cols-4">
+          <TotalRevenueCard 
+            period={currentPeriod}
+            onRefresh={handleRefresh}
+          />
+          <TotalAppointmentsCard 
+            period={currentPeriod}
+            onRefresh={handleRefresh}
+          />
+          <TotalActiveStudentsCard 
+            period={currentPeriod}
+            onRefresh={handleRefresh}
+          />
+          <LessonCompletionRateCard 
+            period={currentPeriod}
+            onRefresh={handleRefresh}
+          />
+        </div>
+
+        {/* Quick Actions Section */}
+        <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 mb-6 transition duration-200`}>
+          <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+          <div className="grid gap-3 md:grid-cols-3">
+            {/* Add Appointment */}
+            <button 
+              onClick={() => navigate('/admin/bookings')}
+              className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-[#bfa45b] to-[#cfb86b] hover:from-[#cfb86b] hover:to-[#d4c876] text-[#1b1b1b] font-semibold rounded-xl transition duration-200 hover:-translate-y-0.5 group"
+            >
+              <Plus className="w-5 h-5 group-hover:scale-110 transition duration-200" />
+              <span>Add Appointment</span>
+            </button>
+
+            {/* Add Module */}
+            <button 
+              onClick={() => navigate('/admin/modules')}
+              className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-[#bfa45b] to-[#cfb86b] hover:from-[#cfb86b] hover:to-[#d4c876] text-[#1b1b1b] font-semibold rounded-xl transition duration-200 hover:-translate-y-0.5 group"
+            >
+              <Plus className="w-5 h-5 group-hover:scale-110 transition duration-200" />
+              <span>Add Module</span>
+            </button>
+
+            {/* Add Lessons */}
+            <button 
+              onClick={() => navigate('/admin/modules')}
+              className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-[#bfa45b] to-[#cfb86b] hover:from-[#cfb86b] hover:to-[#d4c876] text-[#1b1b1b] font-semibold rounded-xl transition duration-200 hover:-translate-y-0.5 group"
+            >
+              <Plus className="w-5 h-5 group-hover:scale-110 transition duration-200" />
+              <span>Add Lessons</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Charts Section - Row 1: Revenue Trend & Bookings by Service */}
+        <div className="grid gap-5 mb-6 lg:grid-cols-2">
+          {/* Revenue Trend */}
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 transition duration-200`}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Revenue Trend</h3>
+                <p className="text-xs text-gray-400 mt-1">{dateRange.start} to {dateRange.end}</p>
+              </div>
+              {isLoadingCharts && <span className="text-xs text-[#bfa45b]">Updating...</span>}
+            </div>
+            {revenueChartData && (
+              <div className="h-80">
+                <Line 
+                  ref={revenueChartRef}
+                  data={revenueChartData} 
+                  options={chartOptions('Revenue')}
+                />
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-3 gap-4 text-center">
+              <div>
+                <p className="text-xs text-gray-400">Peak Revenue</p>
+                <p className="text-lg font-bold text-[#bfa45b]">₱{revenueChartData?.datasets[0]?.data ? Math.max(...revenueChartData.datasets[0].data).toLocaleString() : '0'}K</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Low Revenue</p>
+                <p className="text-lg font-bold text-[#bfa45b]">₱{revenueChartData?.datasets[0]?.data ? Math.min(...revenueChartData.datasets[0].data).toLocaleString() : '0'}K</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Avg Revenue</p>
+                <p className="text-lg font-bold text-[#bfa45b]">₱{revenueChartData?.datasets[0]?.data ? Math.round(revenueChartData.datasets[0].data.reduce((a, b) => a + b, 0) / revenueChartData.datasets[0].data.length).toLocaleString() : '0'}K</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bookings by Service Type */}
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 transition duration-200`}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Bookings by Service Type</h3>
+                <p className="text-xs text-gray-400 mt-1">Service distribution</p>
+              </div>
+              {isLoadingCharts && <span className="text-xs text-[#bfa45b]">Updating...</span>}
+            </div>
+            {bookingsByServiceData && (
+              <>
+                <div className="h-80 mb-4">
+                  <Bar 
+                    data={bookingsByServiceData} 
+                    options={chartOptions('Bookings')}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center text-sm">
+                  {bookingsByServiceData.labels.map((service, idx) => (
+                    <div key={idx} className="bg-[#1b1b1b] p-2 rounded">
+                      <p className="text-xs text-gray-400">{service}</p>
+                      <p className="text-sm font-bold text-[#bfa45b] mt-1">{bookingsByServiceData.datasets[0].data[idx]}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{bookingsByServiceData.percentages[idx]}%</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="grid gap-5 mb-6 lg:grid-cols-2">
+          {/* Donut: Activity Segmentation */}
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 transition duration-200`}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Activity Segmentation</h3>
+                <p className="text-xs text-gray-400 mt-1">User activity breakdown</p>
+              </div>
+              {isLoadingCharts && <span className="text-xs text-[#bfa45b]">Updating...</span>}
+            </div>
+            {studentActivityData?.donut && (
+              <>
+                <div className="h-56 mb-4">
+                  <Bar 
+                    data={{
+                      labels: studentActivityData.donut.labels,
+                      datasets: [{
+                        label: 'Users',
+                        data: studentActivityData.donut.datasets[0].data,
+                        backgroundColor: studentActivityData.donut.datasets[0].backgroundColor,
+                        borderColor: studentActivityData.donut.datasets[0].borderColor,
+                        borderWidth: 2,
+                      }]
+                    }}
+                    options={chartOptions('Activity')}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  {studentActivityData.donut.labels.map((label, idx) => (
+                    <div key={idx} className="p-2 bg-[#1b1b1b] rounded">
+                      <p className="text-xs text-gray-400">{label}</p>
+                      <p className="text-sm font-bold mt-1" style={{color: studentActivityData.donut.datasets[0].backgroundColor[idx]}}>{studentActivityData.donut.datasets[0].data[idx]}</p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Line: Daily Active Users */}
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 transition duration-200`}>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Daily Active Users</h3>
+                <p className="text-xs text-gray-400 mt-1">DAU Trend</p>
+              </div>
+              {isLoadingCharts && <span className="text-xs text-[#bfa45b]">Updating...</span>}
+            </div>
+            {studentActivityData?.line && (
+              <>
+                <div className="h-64 mb-6">
+                  <Line 
+                    data={studentActivityData.line} 
+                    options={chartOptions('DAU')}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-xs text-gray-400">Peak</p>
+                    <p className="text-lg font-bold text-[#28c76f]">{studentActivityData.line.peak}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Average</p>
+                    <p className="text-lg font-bold text-[#bfa45b]">{studentActivityData.line.average}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Lowest</p>
+                    <p className="text-lg font-bold text-[#ff9f43]">{studentActivityData.line.lowest}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Tables Section - Row 1 */}
+        <div className="grid gap-5 mb-6 lg:grid-cols-2">
+          <TopStudentsTable 
+            students={topStudents}
+            onViewProfile={(name) => console.log('View profile:', name)}
+          />
         </div>
 
         {/* Recent User Registrations Notification Section */}
         <div className="grid gap-5 mb-6">
-          <div className={`${BASE_CLASSES.CARD_BG} border-2 border-[#ffd700] rounded-2xl p-6 hover:shadow-lg hover:shadow-[#ffd700]/30 transition duration-200 bg-gradient-to-r from-[#2a2a2a] to-[#1a1a1a]`}>
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 hover:border-[#bfa45b] hover:shadow-lg hover:shadow-[#bfa45b]/20 transition-all duration-200`}>
             <div className="flex justify-between items-center mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#ffd700] flex items-center justify-center text-[#1b1b1b]">
@@ -844,7 +1349,7 @@ const AdminDashboard = () => {
         {/* Today's Schedule Section */}
         <div className="grid gap-5 mb-6">
           {/* Today's Schedule Table */}
-          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 hover:border-[#ffb400] hover:shadow-lg hover:shadow-[#ffb400]/30 transition duration-200`}>
+          <div className={`${BASE_CLASSES.CARD_BG} border border-[#444] rounded-2xl p-6 hover:border-[#bfa45b] hover:shadow-lg hover:shadow-[#bfa45b]/20 transition-all duration-200`}>
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-semibold text-white">Today's Schedule</h3>
               {/* Status Filter */}
@@ -881,9 +1386,9 @@ const AdminDashboard = () => {
                       };
                       return (
                         <tr key={index} className="border-b border-gray-700/30 hover:bg-white/5 transition duration-200">
-                          <td className="p-3 text-white font-semibold">09:00 AM</td>
+                          <td className="p-3 text-white font-semibold">{booking.start_time || 'N/A'}</td>
                           <td className="p-3 text-gray-200">{booking.customer_name}</td>
-                          <td className="p-3 text-gray-300">Sarah Johnson</td>
+                          <td className="p-3 text-gray-300">{booking.instructor_name || 'N/A'}</td>
                           <td className="p-3 text-gray-300">{booking.service_type}</td>
                           <td className="p-3">
                             <span className={`text-xs font-semibold px-2 py-1 rounded-full ${statusClasses[booking.status] || 'text-gray-400 bg-gray-900/30'}`}>
@@ -924,6 +1429,7 @@ const AdminDashboard = () => {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 };

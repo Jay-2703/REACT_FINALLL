@@ -30,18 +30,6 @@ const COLORS = {
   borderColor: '#444',
 };
 
-// Mock API structure for a user
-const MOCK_USERS_DATA = [
-  { id: 1, first_name: 'Jane', last_name: 'Doe', email: 'jane.doe@example.com', phone: '555-0001', role: 'admin', total_points: 9500, completed_lessons: 45, is_verified: true, is_active: true, username: 'janedoe', registered_date: '2023-01-15', last_login: '2025-11-23', appointments: 12, avatar: 'JD', level: 'N/A', activity: [{ date: '2025-11-23', action: 'Logged in' }, { date: '2025-11-22', action: 'Updated profile' }] },
-  { id: 2, first_name: 'John', last_name: 'Smith', email: 'john.smith@example.com', phone: '555-0002', role: 'student', total_points: 520, completed_lessons: 12, is_verified: false, is_active: true, username: 'jsmith', registered_date: '2023-06-20', last_login: '2025-11-18', appointments: 5, avatar: 'JS', level: 'Beginner', activity: [{ date: '2025-11-18', action: 'Completed lesson' }, { date: '2025-11-16', action: 'Booked appointment' }] },
-  { id: 3, first_name: 'Alice', last_name: 'Johnson', email: 'alice@example.com', phone: '555-0003', role: 'instructor', total_points: 3200, completed_lessons: 28, is_verified: true, is_active: true, username: 'alicej', registered_date: '2023-02-10', last_login: '2025-11-22', appointments: 18, avatar: 'AJ', level: 'N/A', activity: [{ date: '2025-11-22', action: 'Created module' }, { date: '2025-11-21', action: 'Reviewed lessons' }] },
-  { id: 4, first_name: 'Bob', last_name: 'Brown', email: 'bob@example.com', phone: '555-0004', role: 'student', total_points: 150, completed_lessons: 5, is_verified: true, is_active: false, username: 'bobb', registered_date: '2024-03-05', last_login: '2025-11-20', appointments: 3, avatar: 'BB', level: 'Beginner', activity: [{ date: '2025-11-20', action: 'Logged in' }] },
-  { id: 5, first_name: 'Charles', last_name: 'Davis', email: 'charles@example.com', phone: '555-0005', role: 'admin', total_points: 12000, completed_lessons: 60, is_verified: true, is_active: true, username: 'cdavis', registered_date: '2022-11-01', last_login: '2025-11-23', appointments: 25, avatar: 'CD', level: 'N/A', activity: [{ date: '2025-11-23', action: 'Logged in' }, { date: '2025-11-23', action: 'Approved users' }] },
-  { id: 6, first_name: 'Eve', last_name: 'Williams', email: 'eve@example.com', phone: '555-0006', role: 'student', total_points: 400, completed_lessons: 10, is_verified: false, is_active: true, username: 'evew', registered_date: '2024-05-12', last_login: '2025-11-15', appointments: 4, avatar: 'EW', level: 'Beginner', activity: [{ date: '2025-11-15', action: 'Logged in' }, { date: '2025-11-14', action: 'Completed quiz' }] },
-  { id: 7, first_name: 'Frank', last_name: 'Miller', email: 'frank@example.com', phone: '555-0007', role: 'instructor', total_points: 4500, completed_lessons: 35, is_verified: true, is_active: true, username: 'fmiller', registered_date: '2023-04-08', last_login: '2025-11-21', appointments: 22, avatar: 'FM', level: 'N/A', activity: [{ date: '2025-11-21', action: 'Logged in' }, { date: '2025-11-20', action: 'Added lesson' }] },
-];
-
-
 // --- Sidebar Navigation Component ---
 const Sidebar = ({ isCollapsed, isMobileOpen, closeSidebar, activePage = 'users', navigate }) => {
   const navItems = [
@@ -492,8 +480,8 @@ const AdminUsers = () => {
       }
     } catch (error) {
       console.error('Error loading users:', error);
-      // Fallback to mock data if API fails
-      setCacheUsers(MOCK_USERS_DATA);
+      // No fallback to mock data
+      setCacheUsers([]);
     }
   }, [roleFilter, statusFilter, globalSearch, startDate, endDate]);
 
@@ -553,10 +541,10 @@ const AdminUsers = () => {
 
   // --- Quick Stats ---
   const quickStats = useMemo(() => {
-    const totalUsers = MOCK_USERS_DATA.length;
-    const activeUsers = MOCK_USERS_DATA.filter(u => u.is_active).length;
+    const totalUsers = 0;
+    const activeUsers = 0;
     const today = new Date().toISOString().split('T')[0];
-    const newThisMonth = MOCK_USERS_DATA.filter(u => u.registered_date.startsWith('2025-11')).length;
+    const newThisMonth = 0;
     
     return {
       totalUsers,
@@ -792,14 +780,12 @@ const AdminUsers = () => {
               <Menu size={24} />
             </button>
 
-            <h2 className="text-xl font-semibold text-white">Users</h2>
-          </div>
-          
-          {/* Header Middle - Timezone/Time */}
-          <div className="hidden md:flex flex-col gap-0.5">
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <Clock size={12} />
-              <span>{formatCurrentDateTime()}</span>
+            <div className="flex flex-col gap-0.5">
+              <h2 className="text-xl font-semibold text-white">Users</h2>
+              <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400">
+                <Clock size={12} />
+                <span>{formatCurrentDateTime()}</span>
+              </div>
             </div>
           </div>
           

@@ -74,9 +74,9 @@ export async function createInvoice(data) {
     // Build base URL from environment or use localhost
     const baseUrl = process.env.FRONTEND_URL || process.env.BASE_URL || 'http://localhost:5175';
     
-    // Build redirect URLs - redirect to landing page with booking success parameters
-    const successUrl = `${baseUrl}/?booking=success&id=${data.externalId}`;
-    const failureUrl = `${baseUrl}/?booking=failed&id=${data.externalId}`;
+    // Build redirect URLs - redirect to landing page with payment status and booking ID
+    const successUrl = `${baseUrl}/?payment=success&booking=${data.externalId}`;
+    const failureUrl = `${baseUrl}/?payment=failed&booking=${data.externalId}`;
 
     console.log(`🔗 Success redirect: ${successUrl}`);
     console.log(`🔗 Failure redirect: ${failureUrl}`);

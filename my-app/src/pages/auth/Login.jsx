@@ -28,6 +28,9 @@ export default function Login() {
       });
       
       if (response.success) {
+        // Mark that this session used password-based login
+        localStorage.setItem('authProvider', 'password');
+
         // Use role directly from response (most up-to-date from database)
         const userRole = response.user.role;
         

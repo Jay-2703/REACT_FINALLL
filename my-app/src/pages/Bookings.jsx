@@ -13,18 +13,18 @@ export default function StudioBooking() {
     duration: '',
     date: '',
     timeSlot: '',
+    startTime: '',
     people: 1,
     payment: ''
   })
   const [availableSlots, setAvailableSlots] = useState([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState(null)
-  const [confirmationId, setConfirmationId] = useState('')
   const [totalAmount, setTotalAmount] = useState(0)
   const [formErrors, setFormErrors] = useState({})
   const [showTimeModal, setShowTimeModal] = useState(false)
   const [timeConflicts, setTimeConflicts] = useState([])
-  
+
   // Auto-fill form with user profile data on mount
   useEffect(() => {
     try {
@@ -80,13 +80,14 @@ export default function StudioBooking() {
     }
   }, [])
 
-  // Service type configuration with pricing
+  // Service type configuration with pricing (must match backend PRICING)
   const SERVICE_CONFIG = {
-    music_lesson: { label: 'Music Lessons', durationFixed: true },
-    recording: { label: 'Recording', durationFixed: false },
-    mixing: { label: 'Mixing', durationFixed: false },
-    band_rehearsal: { label: 'Band Rehearsal', durationFixed: false },
-    production: { label: 'Production', durationFixed: false }
+    music_lesson: { label: 'Music Lessons', price: 500, durationFixed: true },
+    recording: { label: 'Recording Studio', price: 1500, durationFixed: false },
+    rehearsal: { label: 'Rehearsal', price: 800, durationFixed: false },
+    dance: { label: 'Dance Studio', price: 600, durationFixed: false },
+    arrangement: { label: 'Music Arrangement', price: 2000, durationFixed: false },
+    voiceover: { label: 'Voiceover/Podcast', price: 1000, durationFixed: false },
   };
 
   const DURATION_OPTIONS = [
@@ -103,7 +104,7 @@ export default function StudioBooking() {
     setSlotsError(null);
     
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       const response = await fetch(
         `${API_URL}/bookings/available-slots-v2?service=${encodeURIComponent(service)}&duration=${duration}&date=${date}`
       );
@@ -178,7 +179,8 @@ export default function StudioBooking() {
   const handleTimeSlotChange = (slot) => {
     setBookingData(prev => ({
       ...prev,
-      timeSlot: slot.display
+      timeSlot: slot.display, // For display
+      startTime: slot.startTime // For the API
     }));
   };
 
@@ -188,15 +190,19 @@ export default function StudioBooking() {
   // Get minimum date (today)
   const today = new Date().toISOString().split('T')[0];
 
+
   const validateForm = () => {
     const errors = {}
+    
+    console.log('=== VALIDATING FORM ===');
+    console.log('Current bookingData:', bookingData);
     
     if (!bookingData.name.trim()) errors.name = 'Full name is required'
     if (!bookingData.email.trim()) errors.email = 'Email is required'
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookingData.email)) errors.email = 'Invalid email'
     
     if (!bookingData.contact.trim()) errors.contact = 'Mobile number is required'
-    else if (!/^\d{10,13}$/.test(bookingData.contact.replace(/\D/g, ''))) errors.contact = 'Invalid mobile number'
+    else if (!/^09\d{9}$/.test(bookingData.contact.replace(/\D/g, ''))) errors.contact = 'Mobile number must start with 09 and be 11 digits (e.g., 09123456789)'
     
     // Birthday is optional
     if (bookingData.birthday) {
@@ -223,13 +229,29 @@ export default function StudioBooking() {
     if (!bookingData.people || bookingData.people < 1) errors.people = 'Invalid number of people'
     if (!bookingData.payment) errors.payment = 'Payment method is required'
     
+    console.log('Validation errors:', errors);
+    console.log('Form is valid:', Object.keys(errors).length === 0);
+    console.log('=== END VALIDATION ===');
+    
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
-    setBookingData(prev => ({ ...prev, [name]: value }))
+    
+    // For contact field, only allow digits
+    let newValue = value
+    if (name === 'contact') {
+      // Remove any non-digit characters
+      newValue = value.replace(/\D/g, '')
+      // Limit to 11 digits (Philippine phone number)
+      if (newValue.length > 11) {
+        newValue = newValue.slice(0, 11)
+      }
+    }
+    
+    setBookingData(prev => ({ ...prev, [name]: newValue }))
     
     if (formErrors[name]) {
       setFormErrors(prev => ({ ...prev, [name]: '' }))
@@ -237,7 +259,14 @@ export default function StudioBooking() {
   }
 
   const calculateTotal = () => {
-    const serviceRates = { music_lesson: 600, recording: 800, mixing: 1000, band_rehearsal: 1200, production: 1500 }
+    const serviceRates = {
+      music_lesson: 500,
+      recording: 1500,
+      rehearsal: 800,
+      dance: 600,
+      arrangement: 2000,
+      voiceover: 1000,
+    }
     const baseRate = serviceRates[bookingData.service] || 800
     const durationHours = bookingData.duration ? parseInt(bookingData.duration) / 60 : 1
     return baseRate * durationHours
@@ -246,10 +275,10 @@ export default function StudioBooking() {
   const handleContinue = (e) => {
     e.preventDefault()
     if (validateForm()) {
-      const refId = `MIXLAB${Date.now()}`
-      setConfirmationId(refId)
       const total = calculateTotal()
       setTotalAmount(total)
+      
+      // Generate QR code data based on booking information
       
       setStep(2)
     }
@@ -258,27 +287,62 @@ export default function StudioBooking() {
   const handleConfirmPay = async () => {
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       
+      // Get user ID from local storage
+      const user = JSON.parse(localStorage.getItem('user'));
+      const userId = user ? user.user_id : null;
+      const token = localStorage.getItem('token');
+
+      // Extra guard + debug for service selection
+      console.log('=== SERVICE DEBUG ===');
+      console.log('Service from state:', bookingData.service);
+      console.log('Service type of:', typeof bookingData.service);
+      console.log('Service is empty?', !bookingData.service);
+      console.log('Service is valid option?', ['music_lesson', 'recording', 'mixing', 'band_rehearsal', 'production'].includes(bookingData.service));
+
+      if (!bookingData.service || bookingData.service === '') {
+        alert('Please select a service type before continuing');
+        setLoading(false);
+        return;
+      }
+
+      // Prepare booking payload
+      const bookingPayload = {
+        name: bookingData.name,
+        email: bookingData.email,
+        contact: bookingData.contact,
+        birthday: bookingData.birthday || null,
+        address: bookingData.address || null,
+        service: bookingData.service,
+        date: bookingData.date,
+        timeSlot: bookingData.startTime || bookingData.timeSlot,
+        duration: parseInt(bookingData.duration, 10),
+        people: parseInt(bookingData.people, 10),
+        payment: bookingData.payment,
+        userId
+      };
+
+      // Debug logging
+      console.log('=== BOOKING PAYLOAD DEBUG ===');
+      console.log('Full bookingData state:', bookingData);
+      console.log('Service value:', bookingData.service);
+      console.log('Service type:', typeof bookingData.service);
+      console.log('Duration:', bookingData.duration);
+      console.log('Date:', bookingData.date);
+      console.log('Time Slot:', bookingData.startTime || bookingData.timeSlot);
+      console.log('Payment method:', bookingData.payment);
+      console.log('Final payload:', bookingPayload);
+      console.log('=== END DEBUG ===');
+
       // Save booking to database first
       const response = await fetch(`${API_URL}/bookings/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: bookingData.name,
-          email: bookingData.email,
-          contact: bookingData.contact,
-          birthday: bookingData.birthday,
-          address: bookingData.address,
-          service: bookingData.service,
-          date: bookingData.date,
-          time: bookingData.time,
-          hours: bookingData.hours,
-          people: bookingData.people,
-          payment: bookingData.payment,
-          confirmationId,
-          totalAmount
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(bookingPayload)
       });
 
       console.log('Response status:', response.status);
@@ -305,10 +369,9 @@ export default function StudioBooking() {
       
       // Check payment method
       if (bookingData.payment === 'Cash') {
-        // For cash payment, redirect immediately to landing page with success
-        // The backend has already generated QR and sent email
+        // For cash payment, redirect immediately to landing page with success (legacy flow)
         alert('Booking confirmed! Redirecting to view your booking details...');
-        window.location.href = `/?booking=success&id=${result.data.booking.booking_id}`;
+        window.location.href = `/?payment=success&booking=${result.data.booking.booking_id}`;
       } else if (bookingData.payment === 'GCash' || bookingData.payment === 'Credit/Debit Card') {
         // For online payment, redirect to Xendit checkout
         // Store booking ID in localStorage so we can retrieve it after payment
@@ -318,13 +381,13 @@ export default function StudioBooking() {
         if (result.data?.xenditCheckoutUrl) {
           // After payment, Xendit returns to landing page with success notification
           const bookingId = result.data.booking.booking_id;
-          const returnUrl = `${window.location.origin}/?booking=success&id=${bookingId}`;
+          const returnUrl = `${window.location.origin}/?payment=success&booking=${bookingId}`;
           const xenditUrl = `${result.data.xenditCheckoutUrl}${result.data.xenditCheckoutUrl.includes('?') ? '&' : '?'}return_url=${encodeURIComponent(returnUrl)}`;
           window.location.href = xenditUrl;
         } else if (result.data?.paymentUrl) {
           // Fallback payment URL
           const bookingId = result.data.booking.booking_id;
-          const returnUrl = `${window.location.origin}/?booking=success&id=${bookingId}`;
+          const returnUrl = `${window.location.origin}/?payment=success&booking=${bookingId}`;
           const paymentUrl = `${result.data.paymentUrl}${result.data.paymentUrl.includes('?') ? '&' : '?'}return_url=${encodeURIComponent(returnUrl)}`;
           window.location.href = paymentUrl;
         } else {
@@ -342,6 +405,17 @@ export default function StudioBooking() {
       setLoading(false);
     }
   };
+
+  const handleDownloadReceipt = () => {
+    const element = document.getElementById('receipt-content')
+    if (!element) return
+    
+    const html2canvas = window.html2canvas || null
+    if (!html2canvas) {
+      alert('Download feature not available')
+      return
+    }
+  }
 
   const renderReviewDetails = () => (
     <div className="space-y-0">
@@ -410,9 +484,10 @@ export default function StudioBooking() {
                   name="contact"
                   type="text"
                   value={bookingData.contact}
-                  placeholder="09XXYYYYZZZZ"
+                  placeholder="09123456789"
                   onChange={handleInputChange}
                   error={formErrors.contact}
+                  maxLength="11"
                 />
                 <FormGroup
                   label="Birthday"
@@ -447,11 +522,12 @@ export default function StudioBooking() {
                   error={formErrors.service}
                   options={[
                     { value: '', label: 'Select a service...' },
-                    { value: 'music_lesson', label: 'Music Lessons' },
-                    { value: 'recording', label: 'Recording' },
-                    { value: 'mixing', label: 'Mixing' },
-                    { value: 'band_rehearsal', label: 'Band Rehearsal' },
-                    { value: 'production', label: 'Production' }
+                    { value: 'music_lesson', label: 'Music Lessons - ₱500/hour' },
+                    { value: 'recording', label: 'Recording Studio - ₱1500/hour' },
+                    { value: 'rehearsal', label: 'Rehearsal - ₱800/hour' },
+                    { value: 'dance', label: 'Dance Studio - ₱600/hour' },
+                    { value: 'arrangement', label: 'Music Arrangement - ₱2000/hour' },
+                    { value: 'voiceover', label: 'Voiceover/Podcast - ₱1000/hour' },
                   ]}
                 />
 
@@ -593,10 +669,6 @@ export default function StudioBooking() {
             <div className="text-[#ffd700] font-semibold text-lg mb-6">Step 2 of 3: Review Your Booking</div>
             
             <div className="bg-[#232323] rounded-2xl p-6 border-2 border-[#33332d]" style={{ boxShadow: '0 0 20px rgba(255, 215, 0, 0.11)' }}>
-              <div className="text-[#ffd700] font-bold text-lg mb-4 pb-2 border-b border-dashed border-[#33332d]">
-                Confirmation #: {confirmationId}
-              </div>
-              
               {renderReviewDetails()}
               
               <div className="bg-[#222114] border-2 border-[#ffd700] rounded-lg p-4 mt-6 text-center">
@@ -616,21 +688,83 @@ export default function StudioBooking() {
                 className="w-full bg-[#ffd700] hover:bg-[#ffe44c] disabled:opacity-50 text-black font-bold py-3 rounded-lg transition mt-6"
                 style={{ boxShadow: '0 0 12px rgba(255, 215, 0, 0.4)' }}
               >
-                {loading ? 'Processing...' : bookingData.payment === 'Cash' ? 'Confirm Booking' : 'Confirm & Pay'}
+                {loading ? 'Processing...' : 'Confirm and Pay'}
               </button>
 
               <button
                 onClick={() => setStep(1)}
                 className="w-full bg-transparent hover:bg-[#333] text-[#ffd700] font-bold py-3 rounded-lg transition border border-[#ffd700] mt-3"
               >
-                Back
+                Edit Booking
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Time Slot Modal */}
+      {showTimeModal && bookingData.service && bookingData.date && (
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-60 z-40" 
+            onClick={() => setShowTimeModal(false)}
+          />
+          {/* Modal */}
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#232323] rounded-2xl p-8 w-full max-w-2xl relative" style={{ boxShadow: '0 0 30px rgba(255, 215, 0, 0.15)' }}>
+              {/* Close Button */}
+              <button
+                onClick={() => setShowTimeModal(false)}
+                className="absolute top-4 right-4 text-[#bbb] hover:text-[#ffd700] text-2xl transition"
+              >
+                ×
+              </button>
+
+              {/* Modal Header */}
+              <h3 className="text-2xl font-bold text-[#ffd700] mb-2">Available Time Slots</h3>
+              <p className="text-[#bbb] mb-4">
+                Date: <span className="text-[#ffd700] font-semibold">{new Date(bookingData.date).toLocaleDateString()}</span>
+              </p>
+
+              {/* Time Slots Grid */}
+              <div className="grid grid-cols-4 gap-2 max-h-96 overflow-y-auto mb-6">
+                {availableTimeSlots.map((time) => {
+                  const isBooked = timeConflicts.includes(time);
+                  return (
+                    <button
+                      key={time}
+                      onClick={() => !isBooked && handleTimeSelect(time)}
+                      disabled={isBooked}
+                      className={`p-3 rounded-lg font-semibold transition border-2 ${
+                        isBooked
+                          ? 'bg-[#3d3d3d] text-[#888] border-[#555] cursor-not-allowed opacity-50'
+                          : bookingData.time === time
+                          ? 'bg-[#ffd700] text-black border-[#ffd700]'
+                          : 'bg-[#1b1b1b] text-white border-[#3d3d3d] hover:border-[#ffd700]'
+                      }`}
+                      title={isBooked ? 'Already booked' : ''}
+                    >
+                      {time}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => setShowTimeModal(false)}
+                className="w-full bg-[#ffd700] text-black font-bold py-2 rounded-lg hover:bg-[#ffe44c] transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+        </div>
     </div>
-  );
+  )
 }
 
 const FormGroup = ({ label, name, type, value, onChange, error, placeholder, min, max }) => (

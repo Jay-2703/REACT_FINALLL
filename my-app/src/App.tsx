@@ -9,6 +9,8 @@ import Landing from './pages/Landing'
 // @ts-ignore
 import Booking from './pages/Bookings' // This is the User-side booking page
 // @ts-ignore
+import BookingDetails from './pages/BookingDetails'
+// @ts-ignore
 import UserProfile from './pages/Profile' 
 
 // --- Auth Pages ---
@@ -37,7 +39,7 @@ import AdminProfile from './pages/admin/AdminProfile'
 // @ts-ignore
 import AdminReports from './pages/admin/AdminReports'
 // @ts-ignore
-import UsersManagement from './pages/admin/UsersManagement'
+import AdminUsers from './pages/admin/AdminUsers'
 // @ts-ignore
 import AdminModules from './pages/admin/AdminModules'
 // @ts-ignore
@@ -85,6 +87,7 @@ function App() {
         
         {/* User Routes */}
         <Route path="/Bookings" element={<Booking />} />
+        <Route path="/booking/:id" element={<BookingDetails />} />
         <Route path="/Profile" element={<UserProfile />} /> 
 
         {/* --- ADMIN ROUTES --- */}
@@ -104,7 +107,7 @@ function App() {
           path="/admin/users" 
           element={
             <ProtectedAdminRoute>
-              <UsersManagement />
+              <AdminUsers />
             </ProtectedAdminRoute>
           } 
         />

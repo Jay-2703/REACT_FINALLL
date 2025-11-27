@@ -176,6 +176,10 @@ export const getBookingReport = async (req, res) => {
 /**
  * Get lesson completion report
  * GET /api/admin/reports/lessons
+ *
+ * Note: The lesson_progress table does not have lp.id, lessons_completed, total_xp,
+ * quizzes_passed, or last_accessed columns. Instead we aggregate over existing
+ * fields (lesson_id, xp_earned, completed_at) for reporting.
  */
 export const getLessonCompletionReport = async (req, res) => {
   try {
@@ -183,17 +187,16 @@ export const getLessonCompletionReport = async (req, res) => {
 
     let sql = `
       SELECT 
-        lp.id as lesson_id,
+        lp.lesson_id as lesson_id,
         u.id as student_id,
         CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as student_name,
-        lp.lessons_completed,
-        lp.total_xp,
-        lp.quizzes_passed,
-        lp.last_accessed,
-        lp.completed_at
+        COUNT(*) as lessons_completed,
+        COALESCE(SUM(lp.xp_earned), 0) as total_xp,
+        MAX(lp.completed_at) as last_accessed,
+        MAX(lp.completed_at) as completed_at
       FROM lesson_progress lp
       LEFT JOIN users u ON lp.student_id = u.id
-      WHERE 1=1
+      WHERE lp.status = 'completed'
     `;
     const params = [];
 
@@ -210,7 +213,7 @@ export const getLessonCompletionReport = async (req, res) => {
       params.push(student_id);
     }
 
-    sql += ' ORDER BY lp.completed_at DESC LIMIT 50';
+    sql += ' GROUP BY lp.lesson_id, u.id ORDER BY completed_at DESC LIMIT 50';
 
     const completions = await query(sql, params);
 
@@ -957,6 +960,8 @@ export const getTodaysSchedule = async (req, res) => {
     const status = req.query.status || 'all';
     const date = req.query.date || new Date().toISOString().split('T')[0];
 
+    console.log('getTodaysSchedule - Querying for date:', date);
+
     let statusFilter = '';
     if (status !== 'all') {
       statusFilter = `AND b.status = '${status}'`;
@@ -967,6 +972,7 @@ export const getTodaysSchedule = async (req, res) => {
         b.booking_id,
         b.start_time,
         b.end_time,
+        b.booking_date,
         CONCAT(u.first_name, ' ', COALESCE(u.last_name, '')) as student_name,
         CONCAT(i.first_name, ' ', COALESCE(i.last_name, '')) as instructor_name,
         s.service_name,
@@ -982,13 +988,15 @@ export const getTodaysSchedule = async (req, res) => {
       [date]
     );
 
+    console.log('getTodaysSchedule - Query result count:', schedule ? schedule.length : 0);
+
     res.json({
       success: true,
-      data: schedule,
+      data: schedule || [],
       meta: {
         timestamp: new Date().toISOString(),
         date,
-        count: schedule.length
+        count: schedule ? schedule.length : 0
       }
     });
   } catch (error) {
@@ -996,7 +1004,8 @@ export const getTodaysSchedule = async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message,
-      code: 'SCHEDULE_ERROR'
+      code: 'SCHEDULE_ERROR',
+      details: error.stack
     });
   }
 };

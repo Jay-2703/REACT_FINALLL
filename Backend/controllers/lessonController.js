@@ -39,6 +39,29 @@ export const getInstruments = async (req, res) => {
 };
 
 /**
+ * Get all active badges definitions
+ * GET /api/lessons/badges
+ */
+export const getAllBadges = async (req, res) => {
+  try {
+    const badges = await query(
+      'SELECT badge_id, badge_name, description, badge_type, criteria, xp_reward, badge_icon_url, rarity, is_active FROM badges WHERE is_active = 1 ORDER BY badge_id ASC'
+    );
+
+    res.json({
+      success: true,
+      data: badges,
+    });
+  } catch (error) {
+    console.error('Error getting all badges:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+/**
  * Get all modules for an instrument
  * GET /api/lessons/modules/:instrument
  */

@@ -510,22 +510,22 @@ export const completeBooking = async (req, res) => {
     const xpToAward = xpAwarded || 100; // Default 100 XP per lesson
     if (booking.user_id) {
       try {
-        // Check if user_xp table exists
+        // user_xp table uses student_id as the foreign key (see lessonController)
         const xpRecords = await query(
-          "SELECT * FROM user_xp WHERE user_id = ? LIMIT 1",
+          "SELECT * FROM user_xp WHERE student_id = ? LIMIT 1",
           [booking.user_id]
         );
 
         if (xpRecords && xpRecords.length > 0) {
           // Update existing XP record
           await query(
-            "UPDATE user_xp SET total_xp = total_xp + ?, last_earned_at = NOW() WHERE user_id = ?",
+            "UPDATE user_xp SET total_xp = total_xp + ?, last_earned_at = NOW() WHERE student_id = ?",
             [xpToAward, booking.user_id]
           );
         } else {
           // Create new XP record
           await query(
-            "INSERT INTO user_xp (user_id, total_xp, last_earned_at) VALUES (?, ?, NOW())",
+            "INSERT INTO user_xp (student_id, total_xp, last_earned_at) VALUES (?, ?, NOW())",
             [booking.user_id, xpToAward]
           );
         }
