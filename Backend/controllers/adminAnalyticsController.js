@@ -395,56 +395,33 @@ export const getDashboardRevenue = async (req, res) => {
     const period = req.query.period || 'month';
     const { startDate, endDate, prevStartDate, prevEndDate } = getDateRange(period);
 
-    // Current period revenue from transactions
-    const [currentTransactionRevenue] = await query(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM transactions 
-       WHERE status = 'completed' 
-       AND DATE(transaction_date) BETWEEN ? AND ?`,
-      [startDate, endDate]
-    );
-
-    // Current period revenue from bookings (paid status)
-    const [currentBookingRevenue] = await query(
-      `SELECT COALESCE(SUM(CAST(total_price AS DECIMAL(10,2))), 0) as total FROM bookings 
+    // Current period revenue from paid bookings
+    const [currentRevenue] = await query(
+      `SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings 
        WHERE payment_status = 'paid' 
        AND DATE(booking_date) BETWEEN ? AND ?`,
       [startDate, endDate]
     );
 
-    // Previous period revenue from transactions
-    const [previousTransactionRevenue] = await query(
-      `SELECT COALESCE(SUM(amount), 0) as total FROM transactions 
-       WHERE status = 'completed' 
-       AND DATE(transaction_date) BETWEEN ? AND ?`,
-      [prevStartDate, prevEndDate]
-    );
-
-    // Previous period revenue from bookings (paid status)
-    const [previousBookingRevenue] = await query(
-      `SELECT COALESCE(SUM(CAST(total_price AS DECIMAL(10,2))), 0) as total FROM bookings 
+    // Previous period revenue from paid bookings
+    const [previousRevenue] = await query(
+      `SELECT COALESCE(SUM(total_amount), 0) as total FROM bookings 
        WHERE payment_status = 'paid' 
        AND DATE(booking_date) BETWEEN ? AND ?`,
       [prevStartDate, prevEndDate]
     );
 
-    // Combine both sources (avoid double counting by using UNION in a subquery)
-    const currentTxn = parseFloat(currentTransactionRevenue?.total) || 0;
-    const currentBook = parseFloat(currentBookingRevenue?.total) || 0;
-    const previousTxn = parseFloat(previousTransactionRevenue?.total) || 0;
-    const previousBook = parseFloat(previousBookingRevenue?.total) || 0;
-    
-    const current = currentTxn + currentBook;
-    const previous = previousTxn + previousBook;
+    const current = parseFloat(currentRevenue?.total) || 0;
+    const previous = parseFloat(previousRevenue?.total) || 0;
     const percentageChange = previous > 0 ? ((current - previous) / previous * 100).toFixed(2) : 0;
 
-    console.log(`📊 Revenue Calculation - Current: ₱${current}, Previous: ₱${previous}, Change: ${percentageChange}%`);
-    console.log(`📊 Breakdown - Transactions: ₱${currentTxn}, Bookings: ₱${currentBook}`);
+    console.log(`📊 Revenue - Current: ₱${current}, Previous: ₱${previous}, Change: ${percentageChange}%`);
 
     res.json({
       success: true,
       data: {
-        current_revenue: parseFloat(current.toFixed(2)),
-        previous_revenue: parseFloat(previous.toFixed(2)),
+        current_revenue: current,
+        previous_revenue: previous,
         percentage_change: parseFloat(percentageChange),
         period: startDate + ' to ' + endDate
       },
@@ -639,21 +616,8 @@ export const getRevenueTrend = async (req, res) => {
       });
     }
 
-    // Get transaction revenue by date
-    const transactionTrendData = await query(
-      `SELECT 
-        DATE(transaction_date) as date,
-        COALESCE(SUM(amount), 0) as revenue
-       FROM transactions
-       WHERE status = 'completed'
-       AND DATE(transaction_date) BETWEEN ? AND ?
-       GROUP BY DATE(transaction_date)
-       ORDER BY date ASC`,
-      [startDate, endDate]
-    );
-
     // Get booking revenue by date
-    const bookingTrendData = await query(
+    const trendData = await query(
       `SELECT 
         DATE(booking_date) as date,
         COALESCE(SUM(total_amount), 0) as revenue
@@ -664,21 +628,6 @@ export const getRevenueTrend = async (req, res) => {
        ORDER BY date ASC`,
       [startDate, endDate]
     );
-
-    // Merge the two datasets by date
-    const dateMap = new Map();
-    
-    transactionTrendData.forEach(item => {
-      dateMap.set(item.date, (dateMap.get(item.date) || 0) + item.revenue);
-    });
-    
-    bookingTrendData.forEach(item => {
-      dateMap.set(item.date, (dateMap.get(item.date) || 0) + item.revenue);
-    });
-
-    // Convert back to array and sort by date
-    const trendData = Array.from(dateMap, ([date, revenue]) => ({ date, revenue }))
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
 
     // Calculate statistics
     const revenues = trendData.map(d => d.revenue);
@@ -1006,14 +955,19 @@ export const getNewRegistrations = async (req, res) => {
 
 /**
  * GET /api/admin/dashboard/todays-schedule
- * Today's bookings schedule
+ * Upcoming bookings schedule (next 7 days)
  */
 export const getTodaysSchedule = async (req, res) => {
   try {
     const status = req.query.status || 'all';
     const date = req.query.date || new Date().toISOString().split('T')[0];
+    
+    // Get next 7 days of bookings
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + 7);
+    const endDateStr = endDate.toISOString().split('T')[0];
 
-    console.log('getTodaysSchedule - Querying for date:', date);
+    console.log('getTodaysSchedule - Querying from:', date, 'to:', endDateStr);
 
     let statusFilter = '';
     if (status !== 'all') {
@@ -1036,9 +990,9 @@ export const getTodaysSchedule = async (req, res) => {
        JOIN users u ON b.user_id = u.id
        LEFT JOIN users i ON b.instructor_id = i.id
        JOIN services s ON b.service_id = s.service_id
-       WHERE DATE(b.booking_date) = ? ${statusFilter}
-       ORDER BY b.start_time ASC`,
-      [date]
+       WHERE DATE(b.booking_date) BETWEEN ? AND ? ${statusFilter}
+       ORDER BY b.booking_date ASC, b.start_time ASC`,
+      [date, endDateStr]
     );
 
     console.log('getTodaysSchedule - Query result count:', schedule ? schedule.length : 0);
@@ -1048,7 +1002,7 @@ export const getTodaysSchedule = async (req, res) => {
       data: schedule || [],
       meta: {
         timestamp: new Date().toISOString(),
-        date,
+        dateRange: { start: date, end: endDateStr },
         count: schedule ? schedule.length : 0
       }
     });

@@ -16,6 +16,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import { initializeSocket } from './config/socket.js';
+import { loadActiveReminders } from './services/reminderService.js';
 
 // ES module dirname workaround
 const __filename = fileURLToPath(import.meta.url);
@@ -110,6 +111,11 @@ const PORT = process.env.PORT || 5000;
 
 // Initialize Socket.IO
 initializeSocket(server);
+
+// Load active booking reminders on startup
+loadActiveReminders().catch(err => {
+  console.error('Failed to load active reminders:', err);
+});
 
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);

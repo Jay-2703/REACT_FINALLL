@@ -1,6 +1,6 @@
 import { query } from "../config/db.js";
 import { getIO } from "../config/socket.js";
-import { notifyAdmins } from "../services/notificationService.js";
+import { notifyAdmins, notifyUser } from "../services/notificationService.js";
 
 /**
  * Get all bookings with comprehensive filtering
@@ -29,7 +29,12 @@ export const getBookings = async (req, res) => {
     const offset = (pageNum - 1) * limitNum;
 
     let sql = `
-      SELECT b.*, 
+      SELECT b.booking_id, b.booking_reference, b.user_id, b.instructor_id, b.service_id,
+      b.customer_name, b.customer_email, b.customer_contact, b.customer_address,
+      b.booking_date, b.start_time, b.end_time, b.duration_minutes,
+      b.service_type, b.service_name, b.status, b.payment_status,
+      b.qr_code, b.qr_code_path, b.qr_code_data, b.checked_in, b.checked_in_at,
+      b.room_location, b.number_of_people, b.total_amount, b.created_at, b.updated_at,
       u.first_name,
       u.last_name,
       u.email AS customer_email,
@@ -129,44 +134,26 @@ export const getBookings = async (req, res) => {
     const bookings = await query(sql, params);
 
     // Enrich bookings with payment status
-    const enrichedBookings = await Promise.all(
-      bookings.map(async (booking) => {
-        let paymentStatus = booking.payment_status || 'pending';
-        
-        // Query transaction table to determine payment status (override booking.payment_status)
-        const transactions = await query(
-          `SELECT status, refunded_amount FROM transactions WHERE booking_id = ? ORDER BY transaction_date DESC LIMIT 1`,
-          [booking.booking_id]
-        );
+    const enrichedBookings = bookings.map((booking) => {
+      // Use the payment_status directly from bookings table
+      const paymentStatus = booking.payment_status || 'pending';
 
-        if (transactions.length > 0) {
-          const transaction = transactions[0];
-          if (transaction.refunded_amount && transaction.refunded_amount > 0) {
-            paymentStatus = 'refunded';
-          } else if (transaction.status === 'completed') {
-            paymentStatus = 'paid';
-          } else if (transaction.status === 'failed') {
-            paymentStatus = 'failed';
-          }
-        }
+      // Build instructor name - only show if instructor_id exists
+      let instructorName = 'Unassigned';
+      if (booking.instructor_id && booking.instructor_first_name) {
+        instructorName = `${booking.instructor_first_name} ${booking.instructor_last_name || ''}`.trim();
+      }
 
-        // Build instructor name - only show if instructor_id exists
-        let instructorName = 'Unassigned';
-        if (booking.instructor_id && booking.instructor_first_name) {
-          instructorName = `${booking.instructor_first_name} ${booking.instructor_last_name || ''}`.trim();
-        }
-
-        return {
-          ...booking,
-          customer_name: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
-          instructor_name: instructorName,
-          instructor_id: booking.instructor_id || null,
-          specialization: booking.specialization || null,
-          payment_status: paymentStatus,
-          qr_code: booking.qr_code_data || booking.qr_code_path || null
-        };
-      })
-    );
+      return {
+        ...booking,
+        customer_name: `${booking.first_name || ''} ${booking.last_name || ''}`.trim(),
+        instructor_name: instructorName,
+        instructor_id: booking.instructor_id || null,
+        specialization: booking.specialization || null,
+        payment_status: paymentStatus,
+        qr_code: booking.qr_code_data || booking.qr_code_path || null
+      };
+    });
 
     res.json({
       success: true,
@@ -296,11 +283,13 @@ export const updateBooking = async (req, res) => {
 
     await query(`UPDATE bookings SET ${updates.join(", ")} WHERE booking_id = ?`, params);
 
-    // Notify admins
+    // Notify admins about rescheduling
+    const bookingDetails = await query('SELECT * FROM bookings WHERE booking_id = ?', [id]);
+    const booking = bookingDetails && bookingDetails[0];
     await notifyAdmins(
-      "booking",
-      `Booking updated (ID: ${id})`,
-      `/admin/bookings`
+      "booking_rescheduled",
+      `BOOKING RESCHEDULED\nBooking ID: ${id}\nNew Date: ${booking_date || booking?.booking_date}\nNew Time: ${start_time || booking?.start_time}`,
+      `/admin/bookings?id=${id}`
     );
 
     res.json({
@@ -324,11 +313,15 @@ export const deleteBooking = async (req, res) => {
   try {
     const { id } = req.params;
 
-    await query("DELETE FROM bookings WHERE booking_id = ?", [id]);
+    // Get booking details BEFORE deletion for notification
+    const bookingDetails = await query('SELECT * FROM bookings WHERE booking_id = ?', [id]);
+    const booking = bookingDetails && bookingDetails[0];
 
+    await query("DELETE FROM bookings WHERE booking_id = ?", [id]);
+    
     await notifyAdmins(
-      "booking",
-      "A booking has been deleted",
+      "booking_cancelled",
+      `BOOKING DELETED\nBooking ID: ${id}\nClient: ${booking?.customer_name || 'Unknown'}\nDate: ${booking?.booking_date}\nTime: ${booking?.start_time}`,
       `/admin/bookings`
     );
 
@@ -385,17 +378,28 @@ export const confirmBooking = async (req, res) => {
       [id]
     );
 
+    // Notify admins about confirmation (use booking_received type for admin notifications)
+    try {
+      await notifyAdmins(
+        'booking_received',
+        `BOOKING CONFIRMED\nClient: ${booking.first_name} ${booking.last_name}\nService: ${booking.service_name}\nDate: ${booking.booking_date} at ${booking.start_time}`,
+        `/admin/bookings?id=${id}`
+      );
+    } catch (e) {
+      console.warn('Warning: Failed to send admin notification:', e.message);
+    }
+
     // Send confirmation notification to student
     try {
-      await getIO().emit('notification', {
-        userId: booking.user_id,
-        type: 'booking_confirmed',
-        title: 'Booking Confirmed',
-        message: `Your ${booking.service_name} booking on ${booking.booking_date} at ${booking.start_time} has been confirmed!`,
-        bookingId: id
-      });
+      if (booking.user_id) {
+        await notifyUser(
+          booking.user_id,
+          'booking_confirmation',
+          `Your ${booking.service_name} booking on ${booking.booking_date} at ${booking.start_time} has been confirmed!`
+        );
+      }
     } catch (e) {
-      console.warn('Warning: Failed to send socket notification:', e.message);
+      console.warn('Warning: Failed to send user notification:', e.message);
     }
 
     res.json({

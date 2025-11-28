@@ -69,6 +69,7 @@ router.get('/dashboard/revenue', adminAnalyticsController.getDashboardRevenue);
 router.get('/dashboard/appointments', adminAnalyticsController.getDashboardAppointments);
 router.get('/dashboard/students', adminAnalyticsController.getDashboardStudents);
 router.get('/dashboard/completion-rate', adminAnalyticsController.getDashboardCompletionRate);
+router.get('/dashboard/notifications', adminNotificationController.getNotificationMetrics);
 router.get('/dashboard/revenue-trend', adminAnalyticsController.getRevenueTrend);
 router.get('/dashboard/bookings-by-service', adminAnalyticsController.getBookingsByService);
 router.get('/dashboard/user-segmentation', adminAnalyticsController.getUserSegmentation);
@@ -87,6 +88,7 @@ router.get('/reports/transactions', adminAnalyticsController.getTransactionsRepo
 // Notifications
 router.get('/notifications', adminNotificationController.getNotifications);
 router.post('/notifications', adminNotificationController.createAdminNotification);
+router.post('/notifications/template', adminNotificationController.saveNotificationTemplate);
 router.put('/notifications/:id/read', adminNotificationController.markNotificationRead);
 router.put('/notifications/read-all', adminNotificationController.markAllNotificationsRead);
 router.get('/notifications/unread-count', adminNotificationController.getUnreadCount);

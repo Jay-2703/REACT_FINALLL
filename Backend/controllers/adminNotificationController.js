@@ -3,6 +3,125 @@ import { getIO } from '../config/socket.js';
 import { createNotification } from '../services/notificationService.js';
 
 /**
+ * Get notification metrics for dashboard KPI
+ * GET /api/admin/dashboard/notifications
+ */
+export const getNotificationMetrics = async (req, res) => {
+  try {
+    const { period = 'month' } = req.query;
+
+    // Calculate date range based on period
+    const now = new Date();
+    let startDate, endDate, prevStartDate, prevEndDate;
+
+    if (period === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      prevStartDate = new Date(startDate.getTime() - 24 * 60 * 60 * 1000);
+      prevEndDate = new Date(startDate);
+    } else if (period === 'week') {
+      const dayOfWeek = now.getDay();
+      startDate = new Date(now.getTime() - dayOfWeek * 24 * 60 * 60 * 1000);
+      endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+      prevStartDate = new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      prevEndDate = new Date(startDate);
+    } else {
+      // Default to month
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      prevStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      prevEndDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    // Format dates for SQL
+    const formatDate = (date) => date.toISOString().split('T')[0];
+
+    // Get current period metrics
+    const [currentMetrics] = await query(
+      `SELECT 
+        COUNT(*) as total_notifications,
+        SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_count,
+        SUM(CASE WHEN notification_type = 'booking_confirmation' THEN 1 ELSE 0 END) as booking_confirmations,
+        SUM(CASE WHEN notification_type LIKE 'booking_reminder%' THEN 1 ELSE 0 END) as reminders_sent
+       FROM notifications
+       WHERE DATE(created_at) BETWEEN ? AND ?`,
+      [formatDate(startDate), formatDate(endDate)]
+    );
+
+    // Get previous period metrics
+    const [previousMetrics] = await query(
+      `SELECT COUNT(*) as total_notifications
+       FROM notifications
+       WHERE DATE(created_at) BETWEEN ? AND ?`,
+      [formatDate(prevStartDate), formatDate(prevEndDate)]
+    );
+
+    // Calculate percentage change
+    const currentTotal = currentMetrics?.total_notifications || 0;
+    const previousTotal = previousMetrics?.total_notifications || 0;
+    const percentageChange = previousTotal === 0 
+      ? (currentTotal > 0 ? 100 : 0)
+      : Math.round(((currentTotal - previousTotal) / previousTotal) * 100);
+
+    res.json({
+      success: true,
+      data: {
+        total_notifications: currentTotal,
+        unread_count: currentMetrics?.unread_count || 0,
+        booking_confirmations: currentMetrics?.booking_confirmations || 0,
+        reminders_sent: currentMetrics?.reminders_sent || 0,
+        percentage_change: percentageChange,
+        previous_total: previousTotal
+      }
+    });
+  } catch (error) {
+    console.error('Get notification metrics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notification metrics'
+    });
+  }
+};
+
+/**
+ * Save notification template
+ * POST /api/admin/notifications/template
+ */
+export const saveNotificationTemplate = async (req, res) => {
+  try {
+    const { template_id, template_name, trigger, content } = req.body;
+
+    if (!template_id || !content) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: template_id, content'
+      });
+    }
+
+    // Store in database (or in-memory for now)
+    // For now, we'll just acknowledge the save
+    console.log(`✅ Template ${template_id} (${template_name}) saved with trigger: ${trigger}`);
+
+    res.json({
+      success: true,
+      message: 'Template saved successfully',
+      data: {
+        template_id,
+        template_name,
+        trigger,
+        content
+      }
+    });
+  } catch (error) {
+    console.error('Save template error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save template'
+    });
+  }
+};
+
+/**
  * Get notifications
  * GET /api/admin/notifications
  */

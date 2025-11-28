@@ -29,14 +29,14 @@ const COLORS = {
 
 // Notification Templates
 const NOTIFICATION_TEMPLATES = [
-  { id: 1, name: 'Booking Confirmation', trigger: 'booking_created', content: 'Your {{service}} is confirmed for {{date}} at {{time}}. QR Code: {{qr_code}}' },
-  { id: 2, name: 'Payment Receipt', trigger: 'payment_success', content: 'Payment of ${{amount}} received. Invoice: {{invoice_number}}' },
-  { id: 3, name: '1 Hour Reminder', trigger: 'service_reminder_1h', content: 'Your {{service}} starts in 1 hour at {{time}}' },
-  { id: 4, name: '30 Min Reminder', trigger: 'service_reminder_30m', content: 'Your {{service}} starts in 30 minutes' },
-  { id: 5, name: 'Service Complete', trigger: 'service_completed', content: 'Your {{service}} is complete. Weekly progress report: {{report_link}}' },
-  { id: 6, name: 'Cancellation Notice', trigger: 'booking_cancelled', content: 'Your {{service}} scheduled for {{date}} has been cancelled' },
-  { id: 7, name: 'Rescheduled', trigger: 'booking_rescheduled', content: 'Your {{service}} has been rescheduled to {{new_date}} at {{new_time}}' },
-  { id: 8, name: 'Maintenance Alert', trigger: 'maintenance_scheduled', content: 'Studio maintenance scheduled on {{date}}. Services may be unavailable.' },
+  { id: 1, name: 'Booking Confirmation', trigger: 'booking_confirmation', content: 'Great! Your {{service}} booking ({{booking_reference}}) is confirmed for {{date}} at {{time}}. See you then!' },
+  { id: 2, name: 'Payment Receipt', trigger: 'payment_received', content: 'Payment of ₱{{amount}} received successfully. Invoice: {{invoice_number}}. Thank you!' },
+  { id: 3, name: '1 Hour Reminder', trigger: 'booking_reminder_1h', content: 'Reminder: Your {{service}} booking ({{booking_reference}}) starts in 1 hour at {{time}}. Get ready!' },
+  { id: 4, name: '1 Day Reminder', trigger: 'booking_reminder_24h', content: 'Reminder: Your {{service}} booking ({{booking_reference}}) is tomorrow at {{time}}. Don\'t forget!' },
+  { id: 5, name: 'Booking Cancelled', trigger: 'booking_cancelled', content: 'Your {{service}} booking ({{booking_reference}}) scheduled for {{date}} has been cancelled.' },
+  { id: 6, name: 'Booking Rescheduled', trigger: 'booking_rescheduled', content: 'Your {{service}} booking ({{booking_reference}}) has been rescheduled to {{new_date}} at {{new_time}}.' },
+  { id: 7, name: 'Payment Reminder', trigger: 'payment_reminder', content: 'Payment reminder: Your booking ({{booking_reference}}) requires payment of ₱{{amount}}. Please complete payment.' },
+  { id: 8, name: 'System Announcement', trigger: 'system_announcement', content: 'Important announcement: {{message}}' },
 ];
 
 // --- Sidebar Navigation Component ---
@@ -184,17 +184,49 @@ const TemplateModal = ({ isOpen, onClose }) => {
     setSaveMessage('');
   };
 
-  const handleSaveTemplate = () => {
-    const updatedTemplates = templates.map(t =>
-      t.id === selectedTemplate.id
-        ? { ...t, content: editContent }
-        : t
-    );
-    setTemplates(updatedTemplates);
-    localStorage.setItem('notificationTemplates', JSON.stringify(updatedTemplates));
-    setSelectedTemplate({ ...selectedTemplate, content: editContent });
-    setSaveMessage('✅ Template saved successfully!');
-    setTimeout(() => setSaveMessage(''), 3000);
+  const handleSaveTemplate = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setSaveMessage('❌ No authentication token found');
+        return;
+      }
+
+      // Save to backend
+      const response = await fetch('http://localhost:5000/api/admin/notifications/template', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          template_id: selectedTemplate.id,
+          template_name: selectedTemplate.name,
+          trigger: selectedTemplate.trigger,
+          content: editContent
+        })
+      });
+
+      if (response.ok) {
+        // Update local state
+        const updatedTemplates = templates.map(t =>
+          t.id === selectedTemplate.id
+            ? { ...t, content: editContent }
+            : t
+        );
+        setTemplates(updatedTemplates);
+        localStorage.setItem('notificationTemplates', JSON.stringify(updatedTemplates));
+        setSelectedTemplate({ ...selectedTemplate, content: editContent });
+        setSaveMessage('✅ Template saved successfully!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } else {
+        const error = await response.json();
+        setSaveMessage(`❌ Failed to save: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error saving template:', error);
+      setSaveMessage(`❌ Error: ${error.message}`);
+    }
   };
 
   const handleResetTemplate = () => {
@@ -209,14 +241,16 @@ const TemplateModal = ({ isOpen, onClose }) => {
   const handlePreview = () => {
     let preview = editContent;
     preview = preview.replace(/\{\{service\}\}/g, 'Piano Lesson');
+    preview = preview.replace(/\{\{booking_reference\}\}/g, 'REF-12345');
     preview = preview.replace(/\{\{date\}\}/g, 'Nov 30, 2025');
     preview = preview.replace(/\{\{time\}\}/g, '3:00 PM');
     preview = preview.replace(/\{\{new_date\}\}/g, 'Dec 1, 2025');
     preview = preview.replace(/\{\{new_time\}\}/g, '4:00 PM');
-    preview = preview.replace(/\{\{amount\}\}/g, '150');
+    preview = preview.replace(/\{\{amount\}\}/g, '1,500');
     preview = preview.replace(/\{\{qr_code\}\}/g, '[QR Code Image]');
     preview = preview.replace(/\{\{invoice_number\}\}/g, 'INV-2025-001');
     preview = preview.replace(/\{\{report_link\}\}/g, 'https://example.com/report');
+    preview = preview.replace(/\{\{message\}\}/g, 'Studio will be closed for maintenance on Dec 15.');
     setPreviewText(preview);
     setShowPreview(true);
   };
@@ -287,6 +321,7 @@ const TemplateModal = ({ isOpen, onClose }) => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
                   {[
                     { var: '{{service}}', desc: 'Service name (e.g., Piano Lesson)' },
+                    { var: '{{booking_reference}}', desc: 'Booking reference (e.g., REF-12345)' },
                     { var: '{{date}}', desc: 'Booking date' },
                     { var: '{{time}}', desc: 'Session time' },
                     { var: '{{amount}}', desc: 'Payment amount' },
@@ -294,7 +329,8 @@ const TemplateModal = ({ isOpen, onClose }) => {
                     { var: '{{invoice_number}}', desc: 'Invoice ID' },
                     { var: '{{new_date}}', desc: 'Rescheduled date' },
                     { var: '{{new_time}}', desc: 'Rescheduled time' },
-                    { var: '{{report_link}}', desc: 'Link to progress report' }
+                    { var: '{{report_link}}', desc: 'Link to progress report' },
+                    { var: '{{message}}', desc: 'Custom message text' }
                   ].map((item) => (
                     <button
                       key={item.var}
@@ -531,6 +567,43 @@ const AdminNotifications = () => {
     }
   };
 
+  const handleSendTestNotification = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('No authentication token found');
+        return;
+      }
+
+      const response = await fetch('http://localhost:5000/api/admin/notifications', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'system_announcement',
+          title: 'Test Notification',
+          message: 'This is a test notification from the admin notification manager. If you see this, the notification system is working correctly!'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert('✅ Test notification sent successfully!');
+        // Refresh notifications
+        fetchNotifications();
+        fetchUnreadCount();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to send test notification: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error sending test notification:', error);
+      alert(`❌ Error: ${error.message}`);
+    }
+  };
+
   const toggleSidebar = () => {
     if (window.innerWidth <= 768) {
       setIsMobileOpen(prev => !prev);
@@ -603,9 +676,9 @@ const AdminNotifications = () => {
   const filteredNotifications = notifications.filter(n => {
     const search = globalSearch.toLowerCase();
     const matchesSearch = 
-      n.notification_id.toLowerCase().includes(search) ||
-      n.recipient_name.toLowerCase().includes(search) ||
-      n.subject.toLowerCase().includes(search);
+      (n.notification_id ? String(n.notification_id).toLowerCase().includes(search) : false) ||
+      (n.recipient_name ? n.recipient_name.toLowerCase().includes(search) : false) ||
+      (n.subject ? n.subject.toLowerCase().includes(search) : false);
     
     const matchesType = !typeFilter || n.type === typeFilter;
     const matchesChannel = !channelFilter || n.channel === channelFilter;
@@ -735,6 +808,7 @@ const AdminNotifications = () => {
 
               {/* Send Test Button */}
               <button
+                onClick={handleSendTestNotification}
                 className="flex items-center gap-2 bg-[#bfa45b] hover:bg-[#cfb86b] text-[#1b1b1b] px-4 py-2 rounded-lg font-semibold text-sm transition-all"
               >
                 <Send size={18} />
@@ -747,7 +821,7 @@ const AdminNotifications = () => {
         {/* Content Area */}
         <main className="mt-16 p-6 min-h-[calc(100vh-64px)]">
           {/* Stats Dashboard */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-[#2a2a2a] border border-[#444] rounded-xl p-6 hover:border-[#bfa45b] hover:shadow-lg hover:shadow-[#bfa45b]/20 transition-all duration-200 hover:-translate-y-1">
               <div className="flex items-center justify-between">
                 <div>
@@ -775,16 +849,6 @@ const AdminNotifications = () => {
                   <h3 className="text-3xl font-bold text-white mt-2">{notificationStats.failedCount}</h3>
                 </div>
                 <AlertCircle size={24} className="text-[#bfa45b]" />
-              </div>
-            </div>
-
-            <div className="bg-[#2a2a2a] border border-[#444] rounded-xl p-6 hover:border-[#bfa45b] hover:shadow-lg hover:shadow-[#bfa45b]/20 transition-all duration-200 hover:-translate-y-1">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[#bbb] text-sm font-semibold">Queued</p>
-                  <h3 className="text-3xl font-bold text-white mt-2">{notificationStats.queuedCount}</h3>
-                </div>
-                <Clock size={24} className="text-[#bfa45b]" />
               </div>
             </div>
           </div>

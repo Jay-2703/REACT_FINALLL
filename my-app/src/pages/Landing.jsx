@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { FaInstagram, FaFacebook, FaTiktok, FaBell } from "react-icons/fa";
+import { CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react';
 import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
 
 import {
@@ -28,6 +30,7 @@ function displayName(user) {
 }
 
 export default function Landing() {
+  const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [currentSlide, setCurrentSlide] = useState(0)
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
@@ -205,6 +208,21 @@ export default function Landing() {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
+    const userData = localStorage.getItem('user')
+    
+    // Redirect admin users to admin dashboard
+    if (userData && token) {
+      try {
+        const parsedUser = JSON.parse(userData)
+        if (parsedUser.role === 'admin') {
+          navigate('/admin/dashboard', { replace: true })
+          return
+        }
+      } catch (e) {
+        console.error('Error parsing user data:', e)
+      }
+    }
+    
     // User data is already available from login response in localStorage
     // No need to fetch /auth/me
     
@@ -212,7 +230,7 @@ export default function Landing() {
     if (user && token) {
       fetchNotifications();
     }
-  }, [user])
+  }, [user, navigate])
 
   // Set up real-time notifications for logged-in user
   useRealtimeNotifications(false, () => {
@@ -251,6 +269,42 @@ export default function Landing() {
       }
     } catch (err) {
       console.error('Error fetching notifications:', err);
+    }
+  };
+
+  // Handle notification click - mark as read and navigate to reservations
+  const handleNotificationClick = async (notif) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      // Mark notification as read
+      if (!notif.read_status) {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        await fetch(`${API_URL}/notifications/${notif.notification_id}/read`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        // Update local state
+        setNotifications(notifications.map(n => 
+          n.notification_id === notif.notification_id 
+            ? { ...n, read_status: true, is_read: 1 }
+            : n
+        ));
+        setUnreadCount(Math.max(0, unreadCount - 1));
+      }
+
+      // Close notification panel
+      setShowNotificationPanel(false);
+
+      // Navigate to reservations page
+      navigate('/reservations');
+    } catch (err) {
+      console.error('Error handling notification click:', err);
     }
   };
 
@@ -631,8 +685,18 @@ export default function Landing() {
           {/* Mobile Icons */}
           <div className="lg:hidden flex items-center gap-3 z-20">
             {user && (
-              <button className="flex items-center justify-center w-10 h-10 text-[#ffd700] hover:text-[#ffe44c] transition p-0" title="Notifications" aria-label="Notifications">
+              <button 
+                onClick={() => setShowNotificationPanel(!showNotificationPanel)}
+                className="flex items-center justify-center w-10 h-10 text-[#ffd700] hover:text-[#ffe44c] transition p-0 relative" 
+                title="Notifications" 
+                aria-label="Notifications"
+              >
                 <FaBell className="text-xl" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
             )}
             <button className="text-[#ffd700] text-2xl p-2" aria-label="Open menu" onClick={() => setMobileMenuOpen(true)}>☰</button>
@@ -765,25 +829,37 @@ export default function Landing() {
           <div className="overflow-y-auto flex-1">
             {notifications.length > 0 ? (
               notifications.map((notif, idx) => (
-                <div 
+                <button
                   key={idx}
-                  className={`px-4 py-3 border-b border-[#1a1a1a] hover:bg-[#333] transition cursor-pointer ${
+                  onClick={() => handleNotificationClick(notif)}
+                  className={`w-full text-left px-4 py-3 border-b border-[#1a1a1a] hover:bg-[#333] transition ${
                     !notif.read_status ? 'bg-[#1a1a1a]' : ''
                   }`}
                 >
                   <div className="flex justify-between items-start gap-2 mb-1">
-                    <h4 className={`text-sm font-bold ${notif.read_status ? 'text-[#bbb]' : 'text-[#ffd700]'}`}>
-                      {notif.type === 'booking_confirmed' ? '✅' : '📢'} {notif.title}
-                    </h4>
+                    <div className="flex items-center gap-2 flex-1">
+                      {notif.type === 'booking_confirmation' ? (
+                        <CheckCircle size={18} className="text-green-500 flex-shrink-0" />
+                      ) : notif.type?.includes('reminder') ? (
+                        <Clock size={18} className="text-blue-500 flex-shrink-0" />
+                      ) : notif.type === 'booking_cancelled' ? (
+                        <XCircle size={18} className="text-red-500 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle size={18} className="text-yellow-500 flex-shrink-0" />
+                      )}
+                      <h4 className={`text-sm font-bold ${notif.read_status ? 'text-[#bbb]' : 'text-[#ffd700]'}`}>
+                        {notif.title}
+                      </h4>
+                    </div>
                     {!notif.read_status && (
-                      <span className="w-2 h-2 bg-[#ffd700] rounded-full mt-1"></span>
+                      <span className="w-2 h-2 bg-[#ffd700] rounded-full mt-1 flex-shrink-0"></span>
                     )}
                   </div>
                   <p className="text-xs text-[#666] line-clamp-2">{notif.message}</p>
                   <p className="text-xs text-[#555] mt-1">
                     {new Date(notif.created_at).toLocaleDateString()}
                   </p>
-                </div>
+                </button>
               ))
             ) : (
               <div className="px-4 py-8 text-center text-[#666]">
@@ -1269,9 +1345,9 @@ export default function Landing() {
 
               {/* Content Layout */}
               <div className="space-y-4">
-                {/* Booking ID */}
+                {/* Booking Reference */}
                 <div className="text-[#ffd700] font-mono text-sm bg-[#1b1b1b] px-3 py-2 rounded-lg inline-block mx-auto">
-                  Booking ID: {bookingDetails.booking_id}
+                  Booking Reference: {bookingDetails.booking_reference || bookingDetails.booking_id}
                 </div>
 
                 {/* Optional email line */}

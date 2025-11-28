@@ -150,8 +150,8 @@ const BookingDetails = () => {
           <div className="grid md:grid-cols-2 gap-4 text-sm">
             <div className="space-y-2">
               <div>
-                <div className="text-[#888] text-xs uppercase">Booking ID</div>
-                <div className="font-mono text-[#ffd700]">{booking.booking_id}</div>
+                <div className="text-[#888] text-xs uppercase">Booking Reference</div>
+                <div className="font-mono text-[#ffd700]">{booking.booking_reference || booking.booking_id}</div>
               </div>
               <div>
                 <div className="text-[#888] text-xs uppercase">Service Type</div>

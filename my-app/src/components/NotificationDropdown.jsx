@@ -39,6 +39,10 @@ const NotificationDropdown = ({ isAdmin = false }) => {
       case 'level_up':
       case 'badge_earned':
         return <CheckCircle className="w-5 h-5 text-green-400" />;
+      case 'booking_received':
+        return <Info className="w-5 h-5 text-blue-400" />;
+      case 'booking_rescheduled':
+        return <Clock className="w-5 h-5 text-purple-400" />;
       case 'warning':
       case 'booking_cancelled':
       case 'payment_failed':

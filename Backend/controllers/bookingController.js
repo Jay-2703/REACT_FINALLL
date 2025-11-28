@@ -7,6 +7,7 @@ import {
   notifyBookingCancelled,
   notifyBookingRescheduled
 } from '../services/userNotificationService.js';
+import { scheduleBookingReminders, cancelBookingReminders, rescheduleBookingReminders } from '../services/reminderService.js';
 import { createInvoice, getInvoiceStatus } from '../utils/xendit.js';
 import crypto from 'crypto';
 
@@ -328,15 +329,18 @@ export const createBooking = async (req, res) => {
       });
     }
 
+    // Create booking reference
+    const bookingReference = `REF-${Date.now()}`;
+    
     // Insert booking (let database auto-generate booking_id)
     const result = await query(
       `INSERT INTO bookings 
        (booking_reference, user_id, customer_name, customer_email, customer_contact, customer_address, 
         service_id, instructor_id, booking_date, start_time, end_time, duration_minutes, status, 
-        qr_code, user_notes, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        qr_code, user_notes, total_amount, payment_status, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
-        `REF-${Date.now()}`,
+        bookingReference,
         userId,
         name || null,
         email || null,
@@ -350,20 +354,19 @@ export const createBooking = async (req, res) => {
         durationMinutes,
         'pending',
         null,
-        JSON.stringify({ original_service: serviceType, payment_method: paymentMethod })
+        JSON.stringify({ original_service: serviceType, payment_method: paymentMethod }),
+        totalPrice,
+        'pending'
       ]
     );
     
     const bookingId = result.insertId;
 
-    // If payment method is Cash, mark as paid immediately and generate QR code
+    // If payment method is Cash, keep as pending and generate QR code
     if (paymentMethod === 'Cash') {
       try {
-        // Update payment status to paid
-        await query(
-          'UPDATE bookings SET payment_status = "paid" WHERE booking_id = ?',
-          [bookingId]
-        );
+        // Keep payment status as pending (will be marked paid when cash is received)
+        // No need to update - already set to 'pending' in INSERT
 
         // Generate QR code for this booking if qrService is available
         if (qrService && typeof qrService.generateBookingQR === 'function') {
@@ -372,7 +375,7 @@ export const createBooking = async (req, res) => {
             booking_date: bookingDate,
             booking_time: startTime,
             service_type: serviceType,
-          });
+          }, bookingId, bookingReference);
 
           if (qrResult && qrResult.success) {
             await query(
@@ -390,7 +393,6 @@ export const createBooking = async (req, res) => {
 
     let paymentUrl = null;
     let invoiceCreated = false;
-    const bookingReference = `REF-${Date.now()}`;
 
     // For ONLINE payments: Create invoice and Xendit link
     if (paymentMethod === 'GCash' || paymentMethod === 'Credit Card' || paymentMethod === 'PayMaya') {
@@ -459,9 +461,10 @@ export const createBooking = async (req, res) => {
 
     // Send notification to admin about new booking
     try {
+      const endTimeStr = endTime ? ` - ${endTime}` : '';
       await notifyAdmins(
         'booking_received',
-        `New booking received from ${name} for ${serviceType} on ${bookingDate} at ${startTime}`,
+        `NEW BOOKING\nName: ${name}\nEmail: ${email}\nContact: ${contact}\nService: ${serviceType}\nDate: ${bookingDate} at ${startTime}${endTimeStr}\nDuration: ${bookingHours} hour(s)\nAmount: ₱${totalPrice}`,
         `/admin/bookings?id=${bookingId}`
       );
     } catch (notifErr) {
@@ -472,12 +475,36 @@ export const createBooking = async (req, res) => {
       try {
         await notifyUser(
           userId,
-          'booking_confirmed',
-          `Your ${serviceType} booking on ${bookingDate} at ${startTime} has been confirmed!`
+          'booking_confirmation',
+          `Your ${serviceType} booking (${bookingReference}) on ${bookingDate} at ${startTime} has been confirmed!`
         );
       } catch (userNotifErr) {
         console.warn('Failed to send user booking notification:', userNotifErr.message);
       }
+
+      // Schedule booking reminders (1 day and 1 hour before)
+      try {
+        await scheduleBookingReminders(
+          bookingId,
+          userId,
+          bookingDate,
+          startTime,
+          serviceType,
+          bookingReference
+        );
+      } catch (reminderErr) {
+        console.warn('Failed to schedule booking reminders:', reminderErr.message);
+      }
+    }
+
+    // Log activity
+    try {
+      await query(
+        'INSERT INTO activity_logs (user_id, action, entity_type, description, success) VALUES (?, ?, ?, ?, ?)',
+        [userId || null, 'booking_created', 'booking', JSON.stringify({ booking_id: bookingId, booking_reference: bookingReference, service_type: serviceType }), 1]
+      );
+    } catch (logErr) {
+      console.warn('Warning: Failed to log activity:', logErr.message);
     }
 
     res.status(201).json({
@@ -657,7 +684,7 @@ export const getBookingById = async (req, res) => {
           booking_date: booking.booking_date,
           booking_time: booking.start_time,
           service_type: booking.service_name || booking.instrument,
-        });
+        }, booking.booking_id, booking.booking_reference);
         if (qrResult && qrResult.success) {
           await query(
             'UPDATE bookings SET qr_code_path = ?, qr_code_data = ? WHERE booking_id = ?',
@@ -1163,7 +1190,7 @@ export const cancelBooking = async (req, res) => {
     if (token) {
       const decoded = verifyToken(token);
       const isAdmin = decoded?.role === 'admin';
-      const isOwner = decoded?.userId === booking.user_id;
+      const isOwner = decoded?.id === booking.user_id;
 
       if (!isAdmin && !isOwner) {
         return res.status(403).json({
@@ -1174,10 +1201,23 @@ export const cancelBooking = async (req, res) => {
     }
 
     // Update booking status to cancelled
+    // Note: payment_status can only be 'pending', 'paid', 'expired', or 'failed'
+    // Use 'expired' for cancelled bookings
     await query(
-      'UPDATE bookings SET check_in_status = ?, payment_status = ? WHERE booking_id = ?',
-      ['cancelled', 'cancelled', bookingId]
+      'UPDATE bookings SET status = ?, payment_status = ? WHERE booking_id = ?',
+      ['cancelled', 'expired', bookingId]
     );
+
+    // Send cancellation notification to admin
+    try {
+      await notifyAdmins(
+        'booking_cancelled',
+        `BOOKING CANCELLED\nName: ${booking.customer_name}\nEmail: ${booking.customer_email}\nService: ${booking.service_type || 'Service'}\nDate: ${booking.booking_date}\nTime: ${booking.start_time}\nRef: ${booking.booking_reference}`,
+        `/admin/bookings?id=${bookingId}`
+      );
+    } catch (error) {
+      console.warn('Warning: Failed to send admin cancellation notification:', error.message);
+    }
 
     // Send cancellation notification to user
     if (booking.user_id) {
@@ -1186,6 +1226,13 @@ export const cancelBooking = async (req, res) => {
       } catch (error) {
         console.warn('Warning: Failed to send cancellation notification:', error.message);
       }
+
+      // Cancel scheduled reminders
+      try {
+        await cancelBookingReminders(bookingId);
+      } catch (error) {
+        console.warn('Warning: Failed to cancel booking reminders:', error.message);
+      }
     }
 
     // Send cancellation email
@@ -1193,6 +1240,16 @@ export const cancelBooking = async (req, res) => {
       await bookingEmailService.sendBookingCancellationEmail(booking);
     } catch (error) {
       console.warn('Warning: Failed to send cancellation email:', error.message);
+    }
+
+    // Log activity
+    try {
+      await query(
+        'INSERT INTO activity_logs (user_id, action, entity_type, description, success) VALUES (?, ?, ?, ?, ?)',
+        [booking.user_id || null, 'booking_cancelled', 'booking', JSON.stringify({ booking_id: bookingId, booking_reference: booking.booking_reference }), 1]
+      );
+    } catch (logErr) {
+      console.warn('Warning: Failed to log activity:', logErr.message);
     }
 
     res.json({
@@ -1245,7 +1302,7 @@ export const rescheduleBooking = async (req, res) => {
     if (token) {
       const decoded = verifyToken(token);
       const isAdmin = decoded?.role === 'admin';
-      const isOwner = decoded?.userId === booking.user_id;
+      const isOwner = decoded?.id === booking.user_id;
 
       if (!isAdmin && !isOwner) {
         return res.status(403).json({
@@ -1272,6 +1329,17 @@ export const rescheduleBooking = async (req, res) => {
       [newDate, newTime, bookingHours, bookingId]
     );
 
+    // Send reschedule notification to admin
+    try {
+      await notifyAdmins(
+        'booking_rescheduled',
+        `BOOKING RESCHEDULED\nName: ${booking.customer_name}\nEmail: ${booking.customer_email}\nService: ${booking.service_type || 'Service'}\nRef: ${booking.booking_reference}\n\nOLD TIME:\n${booking.booking_date} at ${booking.start_time}\n\nNEW TIME:\n${newDate} at ${newTime}`,
+        `/admin/bookings?id=${bookingId}`
+      );
+    } catch (error) {
+      console.warn('Warning: Failed to send admin reschedule notification:', error.message);
+    }
+
     // Send reschedule notification to user
     if (booking.user_id) {
       try {
@@ -1283,6 +1351,20 @@ export const rescheduleBooking = async (req, res) => {
         );
       } catch (error) {
         console.warn('Warning: Failed to send reschedule notification:', error.message);
+      }
+
+      // Reschedule reminders for new date/time
+      try {
+        await rescheduleBookingReminders(
+          bookingId,
+          booking.user_id,
+          newDate,
+          newTime,
+          booking.service_type || 'Your booking',
+          booking.booking_reference
+        );
+      } catch (error) {
+        console.warn('Warning: Failed to reschedule booking reminders:', error.message);
       }
     }
 
@@ -1297,6 +1379,16 @@ export const rescheduleBooking = async (req, res) => {
       await bookingEmailService.sendBookingRescheduleEmail(updatedBooking);
     } catch (error) {
       console.warn('Warning: Failed to send reschedule email:', error.message);
+    }
+
+    // Log activity
+    try {
+      await query(
+        'INSERT INTO activity_logs (user_id, action, entity_type, description, success) VALUES (?, ?, ?, ?, ?)',
+        [booking.user_id || null, 'booking_rescheduled', 'booking', JSON.stringify({ booking_id: bookingId, booking_reference: booking.booking_reference, old_date: booking.booking_date, new_date: newDate }), 1]
+      );
+    } catch (logErr) {
+      console.warn('Warning: Failed to log activity:', logErr.message);
     }
 
     res.json({

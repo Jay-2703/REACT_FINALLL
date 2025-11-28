@@ -287,6 +287,51 @@ export const completeLesson = async (req, res) => {
       [studentId]
     );
 
+    // Get student name for notification
+    const [student] = await query(
+      'SELECT first_name, last_name FROM users WHERE id = ?',
+      [studentId]
+    );
+    const studentName = student ? `${student.first_name} ${student.last_name}`.trim() : 'Student';
+
+    // Send admin notification for lesson completion
+    try {
+      await notifyAdmins(
+        'lesson_completed',
+        `LESSON COMPLETED\nStudent: ${studentName}\nLesson: ${lesson.lesson_name}\nXP Earned: +${xpEarned}\nTotal XP: ${updatedXp?.total_xp || xpEarned}\nLevel: ${updatedXp?.current_level || 1}`,
+        `/admin/users`
+      );
+    } catch (notifErr) {
+      console.warn('Warning: Failed to send admin lesson completion notification:', notifErr.message);
+    }
+
+    // Send admin notification for badge achievements
+    if (newBadges && newBadges.length > 0) {
+      try {
+        const badgeDetails = newBadges.map(b => `${b.badge_name}`).join(', ');
+        await notifyAdmins(
+          'badge_earned',
+          `BADGES EARNED\nStudent: ${studentName}\nBadges: ${badgeDetails}`,
+          `/admin/users`
+        );
+      } catch (notifErr) {
+        console.warn('Warning: Failed to send admin badge notification:', notifErr.message);
+      }
+    }
+
+    // Send admin notification for level up
+    if (levelUpData.leveledUp) {
+      try {
+        await notifyAdmins(
+          'level_up',
+          `LEVEL UP\nStudent: ${studentName}\nNew Level: ${levelUpData.newLevel}\nTotal XP: ${updatedXp?.total_xp || xpEarned}`,
+          `/admin/users`
+        );
+      } catch (notifErr) {
+        console.warn('Warning: Failed to send admin level up notification:', notifErr.message);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Lesson completed!',

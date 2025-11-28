@@ -230,9 +230,9 @@ export const verifyRegistrationOTP = async (req, res) => {
     // Notify admins about new user registration
     try {
       await notifyAdmins(
-        'user',
-        `New user registered: ${user.first_name} ${user.last_name || ''} (${user.email})`,
-        `/frontend/views/admin/users.html`
+        'new_user_registration',
+        `NEW USER REGISTERED\nName: ${user.first_name} ${user.last_name || ''}\nEmail: ${user.email}\nRole: ${user.role}\nVerified: Yes\nRegistered: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+        `/admin/users`
       );
     } catch (notifError) {
       console.error('Error sending registration notification:', notifError);
@@ -352,6 +352,16 @@ export const login = async (req, res) => {
 
     // Reset failed login attempts on successful login
     await resetFailedLoginAttempts(username);
+
+    // Update last login timestamp
+    try {
+      await query(
+        'UPDATE users SET last_login = NOW() WHERE id = ?',
+        [user.id]
+      );
+    } catch (loginErr) {
+      console.warn('Warning: Failed to update last login:', loginErr.message);
+    }
 
     // Generate JWT token with user's actual role from database
     const token = generateToken({

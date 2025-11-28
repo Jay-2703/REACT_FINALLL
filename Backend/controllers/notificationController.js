@@ -54,20 +54,35 @@ export const getAdminNotifications = async (req, res) => {
     const userRole = req.user?.role;
     const limit = parseInt(req.query.limit) || 10;
 
+    console.log('getAdminNotifications - User ID:', userId, 'Role:', userRole);
+
     if (userRole !== 'admin') {
+      console.warn('Access denied for user', userId, 'with role:', userRole);
       return res.status(403).json({
         success: false,
-        message: 'Access denied. Admin only.'
+        message: 'Access denied. Admin only.',
+        userRole: userRole
       });
     }
 
-    // Get system-wide admin notifications
+    // Get system-wide admin notifications (only admin-specific notification types)
+    const adminNotificationTypes = [
+      'booking_received',
+      'booking_confirmation',
+      'booking_rescheduled',
+      'booking_cancelled',
+      'payment_received',
+      'payment_reminder',
+      'payment_overdue'
+    ];
+    
+    const placeholders = adminNotificationTypes.map(() => '?').join(',');
     const notifications = await query(
       `SELECT * FROM notifications 
-       WHERE user_id = ?
+       WHERE user_id = ? AND notification_type IN (${placeholders})
        ORDER BY created_at DESC 
        LIMIT ?`,
-      [userId, limit]
+      [userId, ...adminNotificationTypes, limit]
     );
 
     // For admin view, show unread count for this admin (their notifications)
@@ -189,10 +204,14 @@ export const getUserRegistrationNotifications = async (req, res) => {
     const userRole = req.user?.role;
     const limit = parseInt(req.query.limit) || 10;
 
+    console.log('getUserRegistrationNotifications - User ID:', userId, 'Role:', userRole);
+
     if (userRole !== 'admin') {
+      console.warn('Access denied for user', userId, 'with role:', userRole);
       return res.status(403).json({
         success: false,
-        message: 'Access denied. Admin only.'
+        message: 'Access denied. Admin only.',
+        userRole: userRole
       });
     }
 

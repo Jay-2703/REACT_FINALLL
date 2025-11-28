@@ -56,6 +56,9 @@ const AdminBookings = () => {
   const [viewType, setViewType] = useState('table'); // table, calendar, timeline
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [bookingToDelete, setBookingToDelete] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
   
   // --- New Booking Form State ---
   const [formData, setFormData] = useState({
@@ -124,7 +127,7 @@ const AdminBookings = () => {
           equipment: booking.equipment || 'N/A',
           qr_code: booking.qr_code || null,
           created_at: booking.created_at || new Date().toISOString(),
-          amount: booking.total_amount || 0,
+          amount: booking.total_amount || booking.amount || 0,
           // Store full booking object for detail modal
           _full: booking
         }));
@@ -249,14 +252,15 @@ const AdminBookings = () => {
     }
   };
 
-  const handleDeleteBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
-      return;
-    }
+  const handleDeleteBooking = (bookingId) => {
+    setBookingToDelete(bookingId);
+    setDeleteConfirmOpen(true);
+  };
 
+  const confirmDeleteBooking = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/admin/bookings/${bookingId}`, {
+      const response = await fetch(`/api/admin/bookings/${bookingToDelete}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -264,15 +268,21 @@ const AdminBookings = () => {
         }
       });
 
-      if (!response.ok) throw new Error('Failed to delete booking');
-      
       const data = await response.json();
-      if (data.success) {
-        alert('Booking deleted successfully!');
-        fetchBookings();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to delete booking');
       }
+      
+      // Success - close modal and refresh
+      setDeleteConfirmOpen(false);
+      setBookingToDelete(null);
+      fetchBookings();
     } catch (err) {
+      console.error('Delete error:', err);
       alert(`Error: ${err.message}`);
+      setDeleteConfirmOpen(false);
+      setBookingToDelete(null);
     }
   };
 
@@ -739,7 +749,7 @@ const AdminBookings = () => {
                 <tbody>
                   {filteredBookings.length > 0 ? (
                     filteredBookings.map((booking) => (
-                      <tr key={booking.id} onClick={() => { setSelectedBooking(booking); setDetailModalOpen(true); }} className="border-b border-[#444] hover:bg-white/5 transition-colors cursor-pointer">
+                      <tr key={booking.id} className="border-b border-[#444] hover:bg-white/5 transition-colors">
                         <td className="p-3 text-sm text-white">
                           <input 
                             type="checkbox" 
@@ -779,11 +789,14 @@ const AdminBookings = () => {
                         <td className="p-3 text-xs text-gray-400">{booking.created_at?.substring(0, 10) || 'N/A'}</td>
                         <td className="p-3">
                           <div className="flex items-center gap-1">
+                            <button onClick={() => { setSelectedBooking(booking); setDetailModalOpen(true); }} className="p-1.5 rounded-md bg-[#1b1b1b] hover:bg-blue-500/20 text-blue-400 transition" title="View Details">
+                              <Table size={14} />
+                            </button>
                             <button onClick={() => { setSelectedBooking(booking); setIsModalOpen(true); }} className="p-1.5 rounded-md bg-[#1b1b1b] hover:bg-[#bfa45b]/20 text-[#bfa45b] transition" title="Edit">
                               <Pen size={14} />
                             </button>
                             <button onClick={() => handleDeleteBooking(booking.id)} className="p-1.5 rounded-md bg-[#1b1b1b] hover:bg-red-500/20 text-red-500 transition" title="Delete">
-                              <X size={14} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -799,57 +812,183 @@ const AdminBookings = () => {
 
                 {/* Pagination */}
                 <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-t border-[#444] gap-4">
-                <div className="flex items-center gap-2 text-sm text-gray-300">
-                  Show 
-                  <select 
-                    value={rowsPerPage}
-                    onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                    className="bg-[#1b1b1b] border border-[#444] rounded px-2 py-1 text-white outline-none focus:border-[#ffb400]"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={15}>15</option>
-                    <option value={20}>20</option>
-                  </select>
-                  entries out of {totalRecords} total
+                  <div className="flex items-center gap-2 text-sm text-gray-300">
+                    Show 
+                    <select 
+                      value={rowsPerPage}
+                      onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                      className="bg-[#1b1b1b] border border-[#444] rounded px-2 py-1 text-white outline-none focus:border-[#ffb400]"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={20}>20</option>
+                    </select>
+                    entries out of {totalRecords} total
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 border border-[#444] rounded-md bg-[#1b1b1b] text-white text-sm disabled:opacity-50 hover:border-[#bfa45b] transition flex items-center gap-1"
+                    >
+                      <ChevronLeft size={16} /> Prev
+                    </button>
+                    <span className="px-3 py-1.5 text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.min(Math.max(1, totalPages), p + 1))}
+                      disabled={currentPage >= totalPages || totalPages === 0}
+                      className="px-3 py-1.5 border border-[#444] rounded-md bg-[#1b1b1b] text-white text-sm disabled:opacity-50 hover:border-[#bfa45b] transition flex items-center gap-1"
+                    >
+                      Next <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1.5 border border-[#444] rounded-md bg-[#1b1b1b] text-white text-sm disabled:opacity-50 hover:border-[#bfa45b] transition flex items-center gap-1"
-                  >
-                    <ChevronLeft size={16} /> Prev
-                  </button>
-                  <span className="px-3 py-1.5 text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
-                  <button 
-                    onClick={() => setCurrentPage(p => Math.min(Math.max(1, totalPages), p + 1))}
-                    disabled={currentPage >= totalPages || totalPages === 0}
-                    className="px-3 py-1.5 border border-[#444] rounded-md bg-[#1b1b1b] text-white text-sm disabled:opacity-50 hover:border-[#bfa45b] transition flex items-center gap-1"
-                  >
-                    Next <ChevronRight size={16} />
-                  </button>
-                </div>
-              </div>
-            </>
-            )}
+                </>
+              )}
             </div>
           )}
 
           {/* CALENDAR VIEW */}
           {viewType === 'calendar' && (
             <div className="bg-[#2a2a2a] p-6 rounded-xl shadow-xl border border-[#444]">
-              <h3 className="text-lg font-semibold text-white mb-4">Calendar View (Month)</h3>
-              <div className="bg-[#1b1b1b] p-6 rounded-lg border border-[#444] text-center text-gray-400">
-                <p className="mb-2">📅 Calendar Integration Coming Soon</p>
-                <p className="text-sm">Displays bookings in Month, Week, and Day views with color-coded status</p>
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-green-500 rounded mr-1"></span>Confirmed</div>
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-yellow-500 rounded mr-1"></span>Pending</div>
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-blue-500 rounded mr-1"></span>Completed</div>
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-red-500 rounded mr-1"></span>Cancelled</div>
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-orange-500 rounded mr-1"></span>Payment Pending</div>
-                  <div className="text-xs"><span className="inline-block w-3 h-3 bg-purple-500 rounded mr-1"></span>In Progress</div>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-white">Calendar View</h3>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => {
+                      const newDate = new Date(calendarMonth);
+                      newDate.setMonth(newDate.getMonth() - 1);
+                      setCalendarMonth(newDate);
+                    }}
+                    className="p-2 rounded-lg border border-[#444] hover:border-[#bfa45b] text-[#bfa45b] transition"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <span className="text-white font-semibold min-w-[150px] text-center">
+                    {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const newDate = new Date(calendarMonth);
+                      newDate.setMonth(newDate.getMonth() + 1);
+                      setCalendarMonth(newDate);
+                    }}
+                    className="p-2 rounded-lg border border-[#444] hover:border-[#bfa45b] text-[#bfa45b] transition"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-6 p-4 bg-[#1b1b1b] rounded-lg border border-[#444]">
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span><span className="text-gray-300">Confirmed</span></div>
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-yellow-500 rounded-full"></span><span className="text-gray-300">Pending</span></div>
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span><span className="text-gray-300">Completed</span></div>
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span><span className="text-gray-300">Cancelled</span></div>
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-orange-500 rounded-full"></span><span className="text-gray-300">Payment Pending</span></div>
+                <div className="text-xs flex items-center gap-2"><span className="inline-block w-2 h-2 bg-purple-500 rounded-full"></span><span className="text-gray-300">In Progress</span></div>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="bg-[#1b1b1b] rounded-lg border border-[#444] overflow-hidden">
+                {/* Weekday Headers */}
+                <div className="grid grid-cols-7 gap-0 border-b border-[#444]">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className="p-3 text-center text-xs font-semibold text-[#bfa45b] bg-[#23233a]">
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calendar Days */}
+                <div className="grid grid-cols-7 gap-0">
+                  {(() => {
+                    const year = calendarMonth.getFullYear();
+                    const month = calendarMonth.getMonth();
+                    const firstDay = new Date(year, month, 1).getDay();
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const days = [];
+
+                    // Empty cells for days before month starts
+                    for (let i = 0; i < firstDay; i++) {
+                      days.push(
+                        <div key={`empty-${i}`} className="aspect-square bg-[#2a2a2a] border border-[#444]"></div>
+                      );
+                    }
+
+                    // Days of the month
+                    for (let day = 1; day <= daysInMonth; day++) {
+                      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const dayBookings = bookings.filter(b => {
+                        // Handle different date formats - normalize to local date
+                        if (!b.date || b.date === 'N/A') return false;
+                        const bookingDateObj = new Date(b.date);
+                        const localDateStr = `${bookingDateObj.getFullYear()}-${String(bookingDateObj.getMonth() + 1).padStart(2, '0')}-${String(bookingDateObj.getDate()).padStart(2, '0')}`;
+                        return localDateStr === dateStr;
+                      });
+                      const hasBookings = dayBookings.length > 0;
+                      const todayObj = new Date();
+                      const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+                      const isToday = todayStr === dateStr;
+
+                      days.push(
+                        <div
+                          key={day}
+                          className={`aspect-square border border-[#444] p-2 flex flex-col cursor-pointer transition hover:bg-[#333] ${
+                            isToday ? 'bg-[#bfa45b]/10' : 'bg-[#1b1b1b]'
+                          }`}
+                        >
+                          <div className={`text-xs font-semibold mb-1 ${isToday ? 'text-[#bfa45b]' : 'text-gray-300'}`}>
+                            {day}
+                          </div>
+                          {hasBookings && (
+                            <div className="flex flex-col gap-0.5 flex-1 overflow-hidden">
+                              {dayBookings.slice(0, 2).map((booking, idx) => {
+                                let statusClass = '';
+                                if (booking.status === 'confirmed') {
+                                  statusClass = 'bg-green-500/30 text-green-300';
+                                } else if (booking.status === 'pending') {
+                                  statusClass = 'bg-yellow-500/30 text-yellow-300';
+                                } else if (booking.status === 'completed') {
+                                  statusClass = 'bg-blue-500/30 text-blue-300';
+                                } else if (booking.status === 'cancelled') {
+                                  statusClass = 'bg-red-500/30 text-red-300';
+                                } else if (booking.status === 'in-progress') {
+                                  statusClass = 'bg-purple-500/30 text-purple-300';
+                                } else if (booking.payment_status === 'pending' && booking.status !== 'pending') {
+                                  statusClass = 'bg-orange-500/30 text-orange-300';
+                                }
+                                
+                                return (
+                                  <div
+                                    key={idx}
+                                    onClick={(e) => { 
+                                      e.stopPropagation();
+                                      setSelectedBooking(booking); 
+                                      setDetailModalOpen(true); 
+                                    }}
+                                    className={`text-xs px-1.5 py-1 rounded truncate cursor-pointer transition hover:opacity-80 font-medium ${statusClass}`}
+                                    title={`${booking.client_name} - ${booking.service_type}`}
+                                  >
+                                    {booking.time_slot}
+                                  </div>
+                                );
+                              })}
+                              {dayBookings.length > 2 && (
+                                <div className="text-xs text-gray-400 px-1">
+                                  +{dayBookings.length - 2} more
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return days;
+                  })()}
                 </div>
               </div>
             </div>
@@ -1209,6 +1348,43 @@ const AdminBookings = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 bg-black/70 z-[300] flex items-center justify-center p-4">
+          <div className="bg-[#2a2a2a] border border-red-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 size={24} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white">Delete Booking?</h3>
+            </div>
+            
+            <p className="text-gray-300 mb-6">
+              Are you sure you want to delete this booking? This action cannot be undone and all associated data will be permanently removed.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setDeleteConfirmOpen(false);
+                  setBookingToDelete(null);
+                }}
+                className="flex-1 px-4 py-2.5 bg-[#1b1b1b] border border-[#444] text-white rounded-lg hover:border-[#bfa45b] transition font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteBooking}
+                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition font-semibold flex items-center justify-center gap-2"
+              >
+                <Trash2 size={16} />
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

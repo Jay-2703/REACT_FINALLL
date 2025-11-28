@@ -595,14 +595,6 @@ const AdminProfile = () => {
               </div>
             </div>
 
-            {/* Mobile Logout Button at Bottom */}
-            <button 
-              onClick={handleLogout}
-              className="lg:hidden w-full bg-red-600/20 text-red-400 px-6 py-3 rounded-lg hover:bg-red-600/30 border border-red-600/50 transition-colors flex items-center justify-center gap-2 font-semibold text-sm"
-            >
-              <LogOut size={18} />
-              Logout
-            </button>
           </div>
         </div>
 

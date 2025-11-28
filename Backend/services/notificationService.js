@@ -104,9 +104,8 @@ async function broadcastNotification(notification, targetUserId = null) {
         created_at: notification.created_at || new Date()
       });
     } else {
-      // Broadcast to all admins and instructors
-      // Use emit to all connected clients, they'll filter on frontend
-      io.emit('admin_notification', {
+      // Broadcast to all admins in the admin-notifications room
+      io.to('admin-notifications').emit('admin_notification', {
         notification_id: notification.notification_id || notification.id,
         notification_type: notification.notification_type || notification.type,
         title: notification.title,

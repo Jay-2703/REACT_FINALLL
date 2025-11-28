@@ -32,9 +32,10 @@ class QRCodeService {
    * Generate QR code for booking
    * @param {object} bookingData - Booking data to encode in QR
    * @param {string} bookingId - Unique booking ID
+   * @param {string} bookingReference - Booking reference (e.g., REF-12345)
    * @returns {Promise<{success: boolean, qrPath?: string, qrDataUrl?: string, error?: string}>}
    */
-  async generateBookingQR(bookingData, bookingId) {
+  async generateBookingQR(bookingData, bookingId, bookingReference) {
     try {
       // Calculate expiration date (30 days from now)
       const expiresAt = new Date();
@@ -42,6 +43,7 @@ class QRCodeService {
       
       // Create QR code data object
       const qrData = {
+        bookingReference: bookingReference || bookingId,
         bookingId: bookingId,
         name: bookingData.name,
         serviceType: bookingData.service_type || bookingData.service_name || 'Studio Session',
@@ -49,7 +51,7 @@ class QRCodeService {
         time: bookingData.booking_time,
         hours: bookingData.hours,
         expiresAt: expiresAt.toISOString().split('T')[0],
-        checkInCode: this.generateCheckInCode(bookingId)
+        checkInCode: this.generateCheckInCode(bookingReference || bookingId)
       };
 
       // Convert to JSON string

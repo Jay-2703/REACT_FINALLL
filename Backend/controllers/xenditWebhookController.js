@@ -123,7 +123,7 @@ async function handlePaymentSuccess(event) {
           booking_date: booking.booking_date,
           booking_time: booking.start_time,
           hours: hours
-        }, booking.booking_id);
+        }, booking.booking_id, booking.booking_reference);
         
         if (qrResult.success) {
           qrDataUrl = qrResult.qrDataUrl;
@@ -313,7 +313,7 @@ export const verifyPaymentStatus = async (req, res) => {
               booking_date: updatedBooking.booking_date,
               booking_time: updatedBooking.start_time,
               hours: hours
-            }, bookingId);
+            }, bookingId, updatedBooking.booking_reference);
             
             if (qrResult && qrResult.success) {
               await query(

@@ -79,6 +79,21 @@ export const initializeSocket = (server) => {
       console.error(`Socket error for ${socket.id}:`, error);
     });
 
+    // Handle admin notifications subscription
+    socket.on('join-admin-notifications', () => {
+      if (socket.user && socket.user.role === 'admin') {
+        socket.join('admin-notifications');
+        console.log(`Socket ${socket.id} (admin ${socket.user.username}) joined admin-notifications room`);
+      } else {
+        console.warn(`Socket ${socket.id} attempted to join admin-notifications without admin role`);
+      }
+    });
+
+    socket.on('leave-admin-notifications', () => {
+      socket.leave('admin-notifications');
+      console.log(`Socket ${socket.id} left admin-notifications room`);
+    });
+
     // Example: Handle payment update subscription
     socket.on('subscribe:payments', () => {
       socket.join('payments');

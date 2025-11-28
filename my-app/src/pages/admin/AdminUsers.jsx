@@ -240,11 +240,22 @@ const UserProfileModal = ({ user, isOpen, onClose, onStatusToggle, onRoleChange 
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#1b1b1b] p-4 rounded-lg border border-[#444]">
               <label className="text-xs font-semibold text-[#bfa45b] uppercase">Registered Date</label>
-              <p className="text-white mt-1">{user.registered_date}</p>
+              <p className="text-white mt-1">
+                {user.registered_date ? new Date(user.registered_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+              </p>
+              <p className="text-xs text-[#888] mt-1">
+                {user.registered_date ? new Date(user.registered_date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </p>
             </div>
             <div className="bg-[#1b1b1b] p-4 rounded-lg border border-[#444]">
               <label className="text-xs font-semibold text-[#bfa45b] uppercase">Last Login</label>
-              <p className="text-white mt-1 flex items-center gap-2"><Clock size={16} /> {user.last_login}</p>
+              <p className="text-white mt-1 flex items-center gap-2">
+                <Clock size={16} className={user.last_login ? 'text-green-500' : 'text-gray-500'} /> 
+                {user.last_login ? new Date(user.last_login).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Never'}
+              </p>
+              <p className="text-xs text-[#888] mt-1">
+                {user.last_login ? new Date(user.last_login).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </p>
             </div>
           </div>
 
@@ -540,17 +551,48 @@ const AdminUsers = () => {
   }, [filteredUsers, currentPage, rowsPerPage]);
 
   // --- Quick Stats ---
-  const quickStats = useMemo(() => {
-    const totalUsers = 0;
-    const activeUsers = 0;
-    const today = new Date().toISOString().split('T')[0];
-    const newThisMonth = 0;
-    
-    return {
-      totalUsers,
-      activeToday: activeUsers,
-      newThisMonth
+  const [quickStats, setQuickStats] = useState({
+    totalUsers: 0,
+    activeToday: 0,
+    newThisMonth: 0
+  });
+
+  useEffect(() => {
+    const fetchQuickStats = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const [totalRes, activeRes, newRes] = await Promise.all([
+          fetch('http://localhost:5000/api/admin/users/stats/total', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('http://localhost:5000/api/admin/users/stats/active-today', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }),
+          fetch('http://localhost:5000/api/admin/users/stats/new-this-month', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+        ]);
+
+        const totalData = totalRes.ok ? await totalRes.json() : { data: { total_users: 0 } };
+        const activeData = activeRes.ok ? await activeRes.json() : { data: { active_today: 0 } };
+        const newData = newRes.ok ? await newRes.json() : { data: { new_this_month: 0 } };
+
+        setQuickStats({
+          totalUsers: totalData.data?.total_users || 0,
+          activeToday: activeData.data?.active_today || 0,
+          newThisMonth: newData.data?.new_this_month || 0
+        });
+      } catch (error) {
+        console.error('Error fetching quick stats:', error);
+      }
     };
+
+    fetchQuickStats();
+    // Refresh stats every 30 seconds
+    const interval = setInterval(fetchQuickStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const handlePageChange = (newPage) => {

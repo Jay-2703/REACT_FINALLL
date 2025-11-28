@@ -60,11 +60,23 @@ const ProtectedAdminRoute = ({ children }) => {
   const authenticated = isAuthenticated();
   const admin = isAdmin();
   
+  // Debug logging
+  const userStr = localStorage.getItem('user');
+  const userRole = userStr ? JSON.parse(userStr).role : 'none';
+  console.log('ProtectedAdminRoute check:', {
+    authenticated,
+    admin,
+    role: userRole,
+    token: !!localStorage.getItem('token')
+  });
+  
   if (!authenticated) {
+    console.warn('Not authenticated, redirecting to login');
     return <Navigate to="/auth/login" replace />; 
   }
 
   if (!admin) {
+    console.warn('Not admin, redirecting to landing page');
     return <Navigate to="/" replace />;
   }
 
