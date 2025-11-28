@@ -1,19 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { FaInstagram, FaFacebook, FaTiktok, FaBell } from "react-icons/fa";
 import { CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react';
 import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
+import LoginModal from '../components/LoginModal';
 
 import {
-  gallery1,
-  gallery2,
-  gallery3,
-  gallery4,
   hero_bg,
   logo,
-  music_production,
-  recording_studio,
   studiomic,
   slider1,
   slider2,
@@ -32,7 +27,7 @@ function displayName(user) {
 export default function Landing() {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
-  const [currentSlide, setCurrentSlide] = useState(0)
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
   // State for the mini-booking form on the landing page
   const [miniBooking, setMiniBooking] = useState({
@@ -58,16 +53,10 @@ export default function Landing() {
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotificationPanel, setShowNotificationPanel] = useState(false)
-  // Contact form state
-  const [contactForm, setContactForm] = useState({
-    name: '',
-    email: '',
-    message: ''
-  })
-  const [contactFormError, setContactFormError] = useState('')
-  const [contactFormSuccess, setContactFormSuccess] = useState(false)
+
   // Login modal state for non-authenticated users
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const loginButtonRef = useRef(null)
 
   useEffect(() => {
     const handleURLParams = async () => {
@@ -208,29 +197,15 @@ export default function Landing() {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-    
-    // Redirect admin users to admin dashboard
-    if (userData && token) {
-      try {
-        const parsedUser = JSON.parse(userData)
-        if (parsedUser.role === 'admin') {
-          navigate('/admin/dashboard', { replace: true })
-          return
-        }
-      } catch (e) {
-        console.error('Error parsing user data:', e)
-      }
-    }
-    
+
     // User data is already available from login response in localStorage
     // No need to fetch /auth/me
-    
+
     // Fetch notifications if user is logged in
     if (user && token) {
       fetchNotifications();
     }
-  }, [user, navigate])
+  }, [user])
 
   // Set up real-time notifications for logged-in user
   useRealtimeNotifications(false, () => {
@@ -272,6 +247,15 @@ export default function Landing() {
     }
   };
 
+  // Hero carousel auto-slide effect
+  useEffect(() => {
+    const heroImages = [slider1, slider2, slider3, slider4, slider5];
+    const interval = setInterval(() => {
+      setHeroSlideIndex((prev) => (prev + 1) % heroImages.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Handle notification click - mark as read and navigate to reservations
   const handleNotificationClick = async (notif) => {
     try {
@@ -308,63 +292,7 @@ export default function Landing() {
     }
   };
 
-  // Handle contact form input change
-  const handleContactFormChange = (e) => {
-    const { name, value } = e.target;
-    setContactForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    setContactFormError('');
-  };
 
-  // Submit contact form
-  const handleContactFormSubmit = async (e) => {
-    e.preventDefault();
-    setContactFormError('');
-
-    // Validation
-    if (!contactForm.name || !contactForm.email || !contactForm.message) {
-      setContactFormError('All fields are required');
-      return;
-    }
-
-    if (contactForm.message.length < 10) {
-      setContactFormError('Message must be at least 10 characters');
-      return;
-    }
-
-    try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_URL}/contact/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contactForm)
-      });
-
-      if (response.ok) {
-        setContactFormSuccess(true);
-        setContactForm({ name: '', email: '', message: '' });
-        
-        // Hide success message after 5 seconds
-        setTimeout(() => setContactFormSuccess(false), 5000);
-      } else {
-        const result = await response.json();
-        setContactFormError(result.message || 'Failed to send message');
-      }
-    } catch (err) {
-      console.error('Error submitting contact form:', err);
-      setContactFormError('Failed to send message. Please try again.');
-    }
-  };
-
-  // Carousel auto-slide
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % sliderImages.length)
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [])
 
   const name = displayName(user)
 
@@ -406,8 +334,7 @@ export default function Landing() {
     return methods[method] || method
   }
 
-  const sliderImages = [slider1, slider2, slider3, slider4, slider5]
-  const galleryImages = [gallery1, gallery2, gallery3, gallery4]
+  const heroCarouselImages = [slider1, slider2, slider3, slider4, slider5];
 
   const testimonials = [
     {
@@ -627,34 +554,35 @@ export default function Landing() {
       
       {/* Header */}
       <header className="w-full sticky top-0 z-50 bg-[#1b1b1b] shadow-md border-b border-[#444]">
-        <div className="max-w-[1200px] mx-auto flex items-center justify-between px-4 py-2">
-          <a href="/" className="flex items-center z-10">
+        <div className="w-full flex items-center px-4 py-2 relative">
+          {/* Logo - Far Left */}
+          <a href="/" className="flex items-center z-10 flex-shrink-0">
             <img src={logo} alt="MixLab Logo" className="h-20 transition-transform hover:scale-105"/>
           </a>
 
-          {/* Navigation */}
-          <nav className="hidden lg:flex flex-1 justify-center">
+          {/* Navigation - Absolutely Centered */}
+          <nav className="hidden lg:flex absolute left-1/2 transform -translate-x-1/2">
             <ul className="flex items-center gap-5">
-              <li><a href="#about" className="px-3 py-2 rounded hover:bg-white/5 transition">About</a></li>
+              <li><a href="/about" className="px-3 py-2 rounded hover:bg-white/5 transition">About</a></li>
               <li className="relative group">
-                <a href="#services" className="px-3 py-2 rounded hover:bg-white/5 transition">Services & Features</a>
+                <a href="/services" className="px-3 py-2 rounded hover:bg-white/5 transition">Services & Features</a>
                 <ul className="absolute left-1/2 -translate-x-1/2 mt-2 bg-[#2a2a2a] rounded-lg hidden group-hover:flex flex-col min-w-[200px] shadow-lg gap-2 p-2">
-                  <li><a href="#services" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Music Lessons</a></li>
-                  <li><a href="/user/welcome" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Band Rehearsal</a></li>
-                  <li><a href="#features" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Recording</a></li>
-                  <li><a href="#features" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Live Room</a></li>
-                  <li><a href="#features" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Control Room</a></li>
-                  <li><a href="#features" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Main Hall</a></li>
+                  <li><a href="/music-lessons" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Music Lessons</a></li>
+                  <li><a href="/band-rehearsal" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Band Rehearsal</a></li>
+                  <li><a href="/recording" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Recording</a></li>
+                  <li><a href="/live-room" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Live Room</a></li>
+                  <li><a href="/control-room" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Control Room</a></li>
+                  <li><a href="/main-hall" className="px-5 py-3 text-base hover:bg-[#1b1b1b] rounded transition">Main Hall</a></li>
                 </ul>
               </li>
-              <li><a href="#gallery" className="px-3 py-2 rounded hover:bg-white/5 transition">Gallery</a></li>
-              <li><a href="#contact" className="px-3 py-2 rounded hover:bg-white/5 transition">Contact Us</a></li>
+              <li><a href="/gallery" className="px-3 py-2 rounded hover:bg-white/5 transition">Gallery</a></li>
+              <li><a href="/contact" className="px-3 py-2 rounded hover:bg-white/5 transition">Contact Us</a></li>
               <li><a href="/Reservations" className="px-3 py-2 rounded hover:bg-white/5 transition ">Reservation</a></li>
             </ul>
           </nav>
 
-          {/* User Actions */}
-          <div className="hidden lg:flex items-center gap-4 z-10 relative">
+          {/* User Actions - Far Right */}
+          <div className="hidden lg:flex items-center gap-4 z-10 relative flex-shrink-0 ml-auto">
             {user && (
               <button 
                 onClick={() => setShowNotificationPanel(!showNotificationPanel)}
@@ -678,7 +606,7 @@ export default function Landing() {
                 </span>
               </a>
             ) : (
-              <a href="/auth/login" className="px-4 py-2 bg-[#ffd700] hover:bg-[#ffe44c] text-black rounded-lg transition font-semibold shadow-lg">Log in</a>
+              <button ref={loginButtonRef} onClick={() => setShowLoginModal(!showLoginModal)} className="px-4 py-2 bg-[#ffd700] hover:bg-[#ffe44c] text-black rounded-lg transition font-semibold shadow-lg">Log in</button>
             )}
           </div>
 
@@ -728,42 +656,70 @@ export default function Landing() {
                 {/* Navigation Links */}
                 <nav className="flex-1 flex flex-col py-4 overflow-y-auto">
                   <a 
-                    href="#about" 
+                    href="/about" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="text-lg">About</span>
                   </a>
                   <a 
-                    href="#services" 
+                    href="/services" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="text-lg">Services & Features</span>
                   </a>
                   <a 
-                    href="/user/welcome" 
+                    href="/music-lessons" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="text-lg pl-4">Music Lessons</span>
                   </a>
                   <a 
-                    href="#features" 
+                    href="/band-rehearsal" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <span className="text-lg pl-4">Studio Features</span>
+                    <span className="text-lg pl-4">Band Rehearsal</span>
                   </a>
                   <a 
-                    href="#gallery" 
+                    href="/recording" 
+                    className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="text-lg pl-4">Recording</span>
+                  </a>
+                  <a 
+                    href="/live-room" 
+                    className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="text-lg pl-4">Live Room</span>
+                  </a>
+                  <a 
+                    href="/control-room" 
+                    className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="text-lg pl-4">Control Room</span>
+                  </a>
+                  <a 
+                    href="/main-hall" 
+                    className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="text-lg pl-4">Main Hall</span>
+                  </a>
+                  <a 
+                    href="/gallery" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="text-lg">Gallery</span>
                   </a>
                   <a 
-                    href="#contact" 
+                    href="/contact" 
                     className="flex items-center px-6 py-4 text-white hover:bg-white/5 transition" 
                     onClick={() => setMobileMenuOpen(false)}
                   >
@@ -795,13 +751,15 @@ export default function Landing() {
                         </div>
                       </a>
                     ) : (
-                      <a 
-                        href="/auth/login" 
-                        className="block text-center px-4 py-3 bg-[#ffd700] text-black font-semibold rounded-lg hover:bg-[#ffe44c] transition shadow-lg" 
-                        onClick={() => setMobileMenuOpen(false)}
+                      <button
+                        onClick={() => {
+                          setShowLoginModal(true);
+                          setMobileMenuOpen(false);
+                        }}
+                        className="block text-center w-full px-4 py-3 bg-[#ffd700] text-black font-semibold rounded-lg hover:bg-[#ffe44c] transition shadow-lg"
                       >
                         Log in
-                      </a>
+                      </button>
                     )}
                   </div>
                 </nav>
@@ -911,120 +869,34 @@ export default function Landing() {
       )}
 
       {/* Hero */}
-      <section className="min-h-screen flex items-center justify-center text-center bg-cover bg-center relative" style={{backgroundImage: `url(${studiomic})`}}>
-        <div className="bg-black/60 p-8 rounded">
+      <section className="min-h-screen flex items-center justify-center text-center relative overflow-hidden">
+        {/* Background Carousel */}
+        <div className="absolute inset-0">
+          {heroCarouselImages.map((img, index) => (
+            <div
+              key={index}
+              className="absolute inset-0 transition-opacity duration-1000"
+              style={{
+                backgroundImage: `url(${img})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                opacity: heroSlideIndex === index ? 1 : 0
+              }}
+            />
+          ))}
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-black/60" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 bg-black/40 p-8 rounded">
           <h1 className="text-5xl md:text-6xl font-bold mb-5">Sound<br />Your Best</h1>
           <p className="text-[#bbb] mb-8 text-lg md:text-xl">Experience the Music on <a href="#" className="text-[#ffd700] font-bold hover:underline">MixLab Music®</a>, Recording, Rehearsal, and Music Lessons.</p>
           <div className="text-4xl animate-bounce text-white">↓</div>
         </div>
       </section>
 
-      {/* About */}
-      <section id="about" className="flex justify-center p-16 bg-[#1b1b1b]">
-        <div className="flex flex-col md:flex-row items-center max-w-[1200px] gap-10 bg-[#2a2a2a] p-12 shadow-lg rounded-lg border border-[#ffd700]/30" style={{boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)'}}>
-          <div className="w-full md:w-1/2">
-            <div className="overflow-hidden rounded-lg h-80 relative">
-              <div className="flex h-full transition-transform duration-500 ease-in-out" style={{transform: `translateX(-${currentSlide * 100}%)`}}>
-                {sliderImages.map((img, i) => (
-                  <div key={i} className="min-w-full h-full">
-                    <img src={img} alt={`Studio Slide ${i+1}`} className="w-full h-full object-cover"/>
-                  </div>
-                ))}
-              </div>
-              {/* Slide indicators */}
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
-                {sliderImages.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentSlide(i)}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i === currentSlide ? 'bg-[#ffd700] w-6' : 'bg-white/50'
-                    }`}
-                    aria-label={`Go to slide ${i + 1}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="w-full md:w-1/2 text-white">
-            <h1 className="text-3xl font-bold mb-5">MixLab Music Studio</h1>
-            <p className="mb-4 text-[#bbb]">We handle professional-level production for streaming-ready, radio-worthy, and strong tracks! This is **NOT AI-generated**.</p>
-            <p className="mb-6 text-[#bbb]">Your song will be produced by real musicians, producers, and arrangers who know how to create the perfect sound.</p>
-            <button className="bg-[#ffd700] hover:bg-[#ffe44c] text-black font-semibold py-3 px-6 rounded-lg transition shadow-lg">Discover MixLab</button>
-          </div>
-        </div>
-      </section>
 
-      {/* Services and Features */}
-      <section id="services" className="max-w-[1200px] mx-auto p-16">
-        {/* Services Grid (Main Services) */}
-        <h2 className="text-4xl font-bold text-center mb-10">Our Services</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          
-          {/* Service Card: Music Lessons */}
-          <div 
-            className="bg-[#2a2a2a] rounded-lg overflow-hidden cursor-pointer hover:bg-[#333] transition border border-[#ffd700]/30" 
-            style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}} 
-            onClick={() => window.location.href='/user/welcome'}
-          >
-            <img src={slider1} alt="Music School" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h3 className="text-xl font-semibold mb-2 text-white">Music lessons</h3>
-              <p className="text-[#bbb] text-sm">Learn to play, create, and perform. We offer lessons for all ages and skill levels in instruments, vocals, songwriting, and music theory.</p>
-            </div>
-          </div>
-          
-          {/* Service Card: Recording Studio */}
-          <div className="bg-[#2a2a2a] rounded-lg overflow-hidden hover:bg-[#333] transition border border-[#ffd700]/30" style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}}>
-            <img src={recording_studio} alt="Recording Studio" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h3 className="text-xl font-semibold mb-2 text-white">Recording Studio</h3>
-              <p className="text-[#bbb] text-sm">Professional multi-track recording for bands, solo artists, and podcasters. Enjoy a creative space with high-end gear, fast turnaround, and optional analog warmth through tape emulation.</p>
-            </div>
-          </div>
-          
-          {/* Service Card: Band Rehearsal */}
-          <div className="bg-[#2a2a2a] rounded-lg overflow-hidden hover:bg-[#333] transition border border-[#ffd700]/30" style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}}>
-            <img src={slider5} alt="Band Rehearsal Studio" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h3 className="text-xl font-semibold mb-2 text-white">Band Rehearsal</h3>
-              <p className="text-[#bbb] text-sm">Fully equipped rehearsal rooms for bands and solo performers. Experience high-quality sound, comfortable acoustics, and reliable gear to make every practice session productive and inspiring.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Studio Features */}
-        <h2 id="features" className="text-4xl font-bold text-center mt-20 mb-10">Studio Features</h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          
-          {/* Feature Card: Live Room */}
-          <div className="bg-[#2a2a2a] rounded-lg overflow-hidden hover:bg-[#333] transition border border-[#ffd700]/30" style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}}>
-            <img src={slider4} alt="Live Room" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h4 className="text-xl font-semibold mb-2 text-white">Live Room</h4>
-              <p className="text-[#bbb] text-sm">Spacious acoustic-treated live room with drum riser for optimal sound capture.</p>
-            </div>
-          </div>
-          
-          {/* Feature Card: Control Room */}
-          <div className="bg-[#2a2a2a] rounded-lg overflow-hidden hover:bg-[#333] transition border border-[#ffd700]/30" style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}}>
-            <img src={music_production} alt="Control Room" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h4 className="text-xl font-semibold mb-2 text-white">Control Room</h4>
-              <p className="text-[#bbb] text-sm">Industry monitors, high-quality preamps, and 24-track I/O for professional mixing and mastering.</p>
-            </div>
-          </div>
-          
-          {/* Feature Card: Mini Hall / Dance Studio */}
-          <div className="bg-[#2a2a2a] rounded-lg overflow-hidden hover:bg-[#333] transition border border-[#ffd700]/30" style={{boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'}}>
-            <img src={slider2} alt="Dance Studio / Mini-Hall" className="h-52 w-full object-cover"/>
-            <div className="p-5">
-              <h4 className="text-xl font-semibold mb-2 text-white">Mini Hall / Dance Studio</h4>
-              <p className="text-[#bbb] text-sm">Spacious and well-lit area ideal for dance classes, workshops, or small performances. Equipped with mirrors, sound system, and flexible lighting.</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Testimonials */}
       <section className="testimonials-section bg-[#1b1b1b] p-16 text-center">
@@ -1079,16 +951,6 @@ export default function Landing() {
               />
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Gallery */}
-      <section id="gallery" className="bg-[#1b1b1b] p-8 md:p-16 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold mb-10">Gallery</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-[1200px] mx-auto">
-          {galleryImages.map((img,i) => (
-            <img key={i} src={img} alt={`Studio ${i+1}`} className="rounded-lg h-48 md:h-64 w-full object-cover hover:scale-105 transition"/>
-          ))}
         </div>
       </section>
 
@@ -1239,73 +1101,6 @@ export default function Landing() {
         </div>
       </aside>
 
-      {/* Contact */}
-      <section id="contact" className="bg-[#1b1b1b] p-8 md:p-16">
-        <div className="max-w-3xl mx-auto mb-12">
-          <h2 className="text-3xl font-bold text-[#ffd700] mb-6 text-center">Get in Touch</h2>
-          
-          {contactFormSuccess && (
-            <div className="mb-6 p-4 bg-green-900/50 border border-green-500 text-green-300 rounded-lg text-center">
-              ✅ Thank you! Your message has been sent successfully. We'll get back to you soon!
-            </div>
-          )}
-
-          {contactFormError && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 text-red-300 rounded-lg text-center">
-              ❌ {contactFormError}
-            </div>
-          )}
-
-          <form onSubmit={handleContactFormSubmit} className="flex flex-col gap-4">
-            <input 
-              type="text" 
-              name="name"
-              placeholder="Name" 
-              value={contactForm.name}
-              onChange={handleContactFormChange}
-              className="p-3 rounded bg-[#1c1c1c] border border-[#3d3d3d] text-white placeholder-[#666] focus:border-[#ffd700] focus:ring-1 focus:ring-[#ffd700] outline-none"
-            />
-            <input 
-              type="email" 
-              name="email"
-              placeholder="Email" 
-              value={contactForm.email}
-              onChange={handleContactFormChange}
-              className="p-3 rounded bg-[#1c1c1c] border border-[#3d3d3d] text-white placeholder-[#666] focus:border-[#ffd700] focus:ring-1 focus:ring-[#ffd700] outline-none"
-            />
-            <textarea 
-              rows={4} 
-              name="message"
-              placeholder="Message" 
-              value={contactForm.message}
-              onChange={handleContactFormChange}
-              className="p-3 rounded bg-[#1c1c1c] border border-[#3d3d3d] text-white placeholder-[#666] focus:border-[#ffd700] focus:ring-1 focus:ring-[#ffd700] outline-none"
-            />
-            <button 
-              type="submit" 
-              className="bg-[#ffd700] hover:bg-[#ffe44c] text-black font-semibold py-3 rounded-full transition shadow-lg"
-            >
-              Send
-            </button>
-          </form>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-[1200px] mx-auto text-center text-[#bbb]">
-          <div>
-            <h4 className="text-[#ffd700] font-semibold mb-2">Studio Address</h4>
-            <p>4th Floor Unit 401 RCJ Building Ortigas Extension Countryside Ave. Pasig City, Philippines</p>
-          </div>
-          <div>
-            <h4 className="text-[#ffd700] font-semibold mb-2">Contact Us</h4>
-            <p><a href="mailto:mixlabmusicstudios@gmail.com" className="text-[#ffd700] hover:underline">mixlabmusicstudios@gmail.com</a><br/>
-            <a href="tel:+639665469046" className="text-[#ffd700] hover:underline">0966 546 9046</a></p>
-          </div>
-          <div>
-            <h4 className="text-[#ffd700] font-semibold mb-2">Music Studio Operation</h4>
-            <p>Monday – Saturday: 10am – 7pm<br/>Sunday: Closed</p>
-          </div>
-        </div>
-      </section>
-
       {/* Footer (Icons using Fa components) */}
       <footer className="bg-[#1b1b1b] text-[#bbb] p-8 text-center border-t border-[#444]">
         <p>MixLab Studio</p>
@@ -1428,24 +1223,9 @@ export default function Landing() {
           </div>
         </>
       )}
+
+      {/* Login Modal */}
+      <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} buttonRef={loginButtonRef.current} />
     </div>
   )
-}
-
-// Export all images
-export {
-  gallery1,
-  gallery2,
-  gallery3,
-  gallery4,
-  hero_bg,
-  logo,
-  music_production,
-  recording_studio,
-  slider1,
-  slider2,
-  slider3,
-  slider4,
-  slider5,
-  studiomic,
 }
