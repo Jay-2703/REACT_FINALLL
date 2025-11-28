@@ -273,7 +273,7 @@ const AdminProfile = () => {
   const confirmLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/auth/login');
+    navigate('/');
   };
 
   const navItems = [

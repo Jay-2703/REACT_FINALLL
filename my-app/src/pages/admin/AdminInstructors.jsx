@@ -76,7 +76,7 @@ const Sidebar = ({ isCollapsed, isMobileOpen, closeSidebar, activePage = 'instru
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to logout?')) {
       try { localStorage.removeItem('token'); } catch (_) { }
-      navigate('/auth/login');
+      navigate('/');
     }
   };
 

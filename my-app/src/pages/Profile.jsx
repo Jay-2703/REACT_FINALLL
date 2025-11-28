@@ -159,7 +159,7 @@ export default function ProfileDashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('userRole');
-    navigate('/auth/login');
+    navigate('/');
   };
 
   const badgeTypeIconMap = {

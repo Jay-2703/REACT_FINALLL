@@ -1331,7 +1331,7 @@ const AdminDashboard = () => {
             if (window.confirm('Are you sure you want to logout?')) {
               localStorage.removeItem('token');
               localStorage.removeItem('user');
-              navigate('/auth/login');
+              navigate('/');
             }
           }}
         >
