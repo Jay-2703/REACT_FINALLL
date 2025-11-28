@@ -588,7 +588,6 @@ export default function StudioBooking() {
         {/* STEP 1: Booking Form */}
         {step === 1 && (
           <div>
-            <div className="text-[#ffd700] font-semibold text-lg mb-6">Step 1 of 3: Book Your Session</div>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
               {/* Left Column */}
@@ -818,7 +817,6 @@ export default function StudioBooking() {
         {/* STEP 2: Review */}
         {step === 2 && (
           <div className="max-w-lg mx-auto">
-            <div className="text-[#ffd700] font-semibold text-lg mb-6">Step 2 of 3: Review Your Booking</div>
             
             <div className="bg-[#232323] rounded-2xl p-6 border-2 border-[#33332d]" style={{ boxShadow: '0 0 20px rgba(255, 215, 0, 0.11)' }}>
               {renderReviewDetails()}

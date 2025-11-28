@@ -14,6 +14,26 @@ import BookingDetails from './pages/BookingDetails'
 import UserProfile from './pages/Profile'
 // @ts-ignore
 import Reservations from './pages/Reservations'
+// @ts-ignore
+import About from './pages/About'
+// @ts-ignore
+import Services from './pages/Services'
+// @ts-ignore
+import Gallery from './pages/Gallery'
+// @ts-ignore
+import Contact from './pages/Contact'
+// @ts-ignore
+import MusicLessons from './pages/MusicLessons'
+// @ts-ignore
+import BandRehearsal from './pages/BandRehearsal'
+// @ts-ignore
+import Recording from './pages/Recording'
+// @ts-ignore
+import LiveRoom from './pages/LiveRoom'
+// @ts-ignore
+import ControlRoom from './pages/ControlRoom'
+// @ts-ignore
+import MainHall from './pages/MainHall'
 
 // --- Auth Pages ---
 // @ts-ignore
@@ -117,7 +137,21 @@ function App() {
         <Route path="/Bookings" element={<Booking />} />
         <Route path="/booking/:id" element={<BookingDetails />} />
         <Route path="/Reservations" element={<Reservations />} />
-        <Route path="/Profile" element={<UserProfile />} /> 
+        <Route path="/Profile" element={<UserProfile />} />
+        
+        {/* Landing Page Sub-Routes */}
+        <Route path="/about" element={<About />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/gallery" element={<Gallery />} />
+        <Route path="/contact" element={<Contact />} />
+
+        {/* Service Detail Pages */}
+        <Route path="/music-lessons" element={<MusicLessons />} />
+        <Route path="/band-rehearsal" element={<BandRehearsal />} />
+        <Route path="/recording" element={<Recording />} />
+        <Route path="/live-room" element={<LiveRoom />} />
+        <Route path="/control-room" element={<ControlRoom />} />
+        <Route path="/main-hall" element={<MainHall />} />
 
         {/* --- ADMIN ROUTES --- */}
         
