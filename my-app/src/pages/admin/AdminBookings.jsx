@@ -498,7 +498,7 @@ const AdminBookings = () => {
             if (window.confirm('Are you sure you want to logout?')) {
               localStorage.removeItem('token');
               localStorage.removeItem('user');
-              navigate('/auth/login');
+              navigate('/');
             }
           }}
           className={`mt-auto flex items-center gap-3 p-2.5 rounded-lg text-sm transition-all duration-200 hover:bg-red-600 hover:text-white group
